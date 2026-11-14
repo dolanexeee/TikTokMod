@@ -109,6 +109,12 @@ static void TM3AlertFrom(UIViewController *vc, NSString *title, NSString *messag
     [vc presentViewController:a animated:YES completion:nil];
 }
 
+// Shared capture state (declared up here — the #10/#18 hooks below use it).
+// Last URL list seen on the stock download path (#10 picker fallback) and
+// last source URL stock itself set (#18 picker entry).
+static NSArray *g3_lastCapturedURLs = nil;
+static NSString *g3_lastWebSourceURL = nil;
+
 // ---------------------------------------------------------------------------
 // Installer infrastructure (HARD mirror of V2's TM2InstallSite)
 // kind: 'v' void, 'B' BOOL (accepts B/c), 'i' integer, '@' object,
@@ -1195,9 +1201,6 @@ static void TM3InstallAdBlocking(void) {
 // Until then each is a safe no-op that says so.
 // ---------------------------------------------------------------------------
 
-static NSArray *g3_lastCapturedURLs = nil;
-static NSString *g3_lastWebSourceURL = nil;
-
 @implementation TikTokModHard
 
 + (void)installHardHooks {
@@ -1369,7 +1372,8 @@ static NSString *g3_lastWebSourceURL = nil;
             field.autocapitalizationType = UITextAutocapitalizationTypeNone;
         }];
         [prompt addAction:[UIAlertAction actionWithTitle:@"Download" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *done) {
-            NSString *urlString = [[prompt.textFields.firstObject.text ?: @""]
+            NSString *rawText = prompt.textFields.firstObject.text;
+            NSString *urlString = [[rawText ? rawText : @""]
                 stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             if (![urlString hasPrefix:@"http://"] && ![urlString hasPrefix:@"https://"]) {
                 TM3AlertFrom(vc, @"Web sources (#18)", @"That is not an http(s) URL.");
@@ -1424,7 +1428,8 @@ static NSString *g3_lastWebSourceURL = nil;
             field.autocapitalizationType = UITextAutocapitalizationTypeAllCharacters;
         }];
         [prompt addAction:[UIAlertAction actionWithTitle:@"Apply" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *done) {
-            NSString *code = [[prompt.textFields.firstObject.text ?: @""]
+            NSString *rawCode = prompt.textFields.firstObject.text;
+            NSString *code = [[rawCode ? rawCode : @""]
                 stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]].uppercaseString;
             if (code.length != 2) {
                 TM3AlertFrom(vc, @"Region switching (#24)", @"Enter a 2-letter ISO country code.");
