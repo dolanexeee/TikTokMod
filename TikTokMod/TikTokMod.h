@@ -21,6 +21,13 @@ NS_ASSUME_NONNULL_BEGIN
         originalSelector:(SEL)originalSelector
         swizzledSelector:(SEL)swizzledSelector;
 
+/// Same contract as +safeSwizzleClass:, for CLASS methods (metaclass).
+/// Needed for TTKABTest flags, AWEFeedAdController +preprocessAwemes:,
+/// TTKStudioPublishPrecheckHandler prechecks, TTKCIShareABRepostShare +maxLength.
++ (BOOL)safeSwizzleClassMethod:(Class)cls
+              originalSelector:(SEL)originalSelector
+              swizzledSelector:(SEL)swizzledSelector;
+
 /// Fail-soft class lookup: returns Nil + NSLog if the class is absent.
 + (nullable Class)safeClass:(NSString *)className;
 

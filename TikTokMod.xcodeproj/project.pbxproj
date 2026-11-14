@@ -10,6 +10,7 @@
 		4528D7772DF4A8732463B57C /* TikTokMod.m in Sources */ = {isa = PBXBuildFile; fileRef = 75A7C52F2D8053346D5D9740 /* TikTokMod.m */; };
 		FA134098F911EAB13D393606 /* TikTokModSettings.m in Sources */ = {isa = PBXBuildFile; fileRef = 3A4E59F70FC560F09418B910 /* TikTokModSettings.m */; };
 		7AAE468C04EC9480128CCE16 /* TikTokModHub.m in Sources */ = {isa = PBXBuildFile; fileRef = 435DFD95A58DCEE9A1375799 /* TikTokModHub.m */; };
+		EA4760C756E5D8A9695944E7 /* TikTokModV1.m in Sources */ = {isa = PBXBuildFile; fileRef = 51B3F298088D9B23B6D526A8 /* TikTokModV1.m */; };
 		B99A213C11C777E0E7D59583 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2FF68A975D52E3BFDB402D17 /* UIKit.framework */; };
 		C21F7AED084AC1E7166BE148 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4629FD99B9E2F5A277DDBF02 /* Foundation.framework */; };
 		3A120725C211422C744287E1 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E38C90FAAEBD754DDB39AA79 /* CoreGraphics.framework */; };
@@ -22,6 +23,8 @@
 		A9F331A6ABA7330435C3C66E /* TikTokModSettings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TikTokModSettings.h; sourceTree = "<group>"; };
 		435DFD95A58DCEE9A1375799 /* TikTokModHub.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TikTokModHub.m; sourceTree = "<group>"; };
 		225775B4FCA0AFED976A5B4C /* TikTokModHub.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TikTokModHub.h; sourceTree = "<group>"; };
+		51B3F298088D9B23B6D526A8 /* TikTokModV1.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TikTokModV1.m; sourceTree = "<group>"; };
+		4EDBEDA940305AF87EEA9FD5 /* TikTokModV1.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TikTokModV1.h; sourceTree = "<group>"; };
 		A8792157CB4F27FB949C035F /* TikTokMod.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = TikTokMod.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		2FF68A975D52E3BFDB402D17 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		4629FD99B9E2F5A277DDBF02 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
@@ -59,6 +62,8 @@
 				A9F331A6ABA7330435C3C66E /* TikTokModSettings.h */,
 				435DFD95A58DCEE9A1375799 /* TikTokModHub.m */,
 				225775B4FCA0AFED976A5B4C /* TikTokModHub.h */,
+				51B3F298088D9B23B6D526A8 /* TikTokModV1.m */,
+				4EDBEDA940305AF87EEA9FD5 /* TikTokModV1.h */,
 			);
 			path = TikTokMod;
 			sourceTree = "<group>";
@@ -130,6 +135,7 @@
 			4528D7772DF4A8732463B57C /* TikTokMod.m in Sources */,
 			FA134098F911EAB13D393606 /* TikTokModSettings.m in Sources */,
 			7AAE468C04EC9480128CCE16 /* TikTokModHub.m in Sources */,
+			EA4760C756E5D8A9695944E7 /* TikTokModV1.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
