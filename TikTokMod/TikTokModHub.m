@@ -12,6 +12,7 @@
 #import "TikTokModSettings.h"
 #import "TikTokModV1.h"
 #import "TikTokModV2.h"
+#import "TikTokModHard.h"
 
 @interface TikTokModHub () <UIImagePickerControllerDelegate, UINavigationControllerDelegate,
                             UISearchResultsUpdating>
@@ -134,6 +135,10 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
     if ([section isEqualToString:@"Downloads"]) {
         return @[
             @{@"id": @"offlineCount", @"title": @"Offline video count (#19)"},
+            @{@"id": @"qualityPicker", @"title": @"Download current video — pick quality (#10)"},
+            @{@"id": @"webSource", @"title": @"Download from web source / paste URL (#18)"},
+            @{@"id": @"audioDownload", @"title": @"Download current video's audio (#25)"},
+            @{@"id": @"pinningStatus", @"title": @"Pinning-bypass status (HARD gate)"},
         ];
     }
     if ([section isEqualToString:@"Profile & Appearance"]) {
@@ -161,6 +166,7 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
             @{@"id": @"filterMinLikes", @"title": @"Content filter — minimum likes (#22)"},
             @{@"id": @"filterMinViews", @"title": @"Content filter — minimum views (#22)"},
             @{@"id": @"keywordEditor", @"title": @"Open TikTok's own keyword editor (#22)"},
+            @{@"id": @"regionPicker", @"title": @"Region — pick country code (#24, PARTIAL)"},
         ];
     }
     return @[];
@@ -245,6 +251,26 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
         return [NSString stringWithFormat:@"Background: %@ (feed chrome only) — tap to change",
                 s.themeBackgroundColorHex ?: @"stock"];
     }
+    // --- HARD rows (#10 / #18 / #24 / #25 + bypass status) ---
+    if ([rowId isEqualToString:@"qualityPicker"]) {
+        NSString *choice = s.downloadQualityChoice;
+        return [NSString stringWithFormat:@"Remembered quality: %@ — tap to download the current video (UNVERIFIED-RUNTIME)",
+                choice];
+    }
+    if ([rowId isEqualToString:@"webSource"]) {
+        return @"Paste a URL or reuse the last stock source — tap to open the picker (UNVERIFIED-RUNTIME)";
+    }
+    if ([rowId isEqualToString:@"audioDownload"]) {
+        return @"Saves to Documents/TikTokMod/Music/ — tap to download the current video's audio (UNVERIFIED-RUNTIME)";
+    }
+    if ([rowId isEqualToString:@"pinningStatus"]) {
+        return @"Tap for the full bypass status (ObjC surfaces only — TTNet native layer NOT covered)";
+    }
+    if ([rowId isEqualToString:@"regionPicker"]) {
+        NSString *code = s.regionCode;
+        return [NSString stringWithFormat:@"Region: %@ — tap to change (PARTIAL — server decides the feed)",
+                code.length > 0 ? code : @"stock"];
+    }
     return nil;
 }
 
@@ -292,11 +318,14 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     if (section == (NSInteger)[self tm_visibleSections].count - 1 && ![self tm_isSearching]) {
-        return @"TikTokMod 47.7.0 V2 — 37 features implemented per DYLIB-DESIGN.md §4. "
+        return @"TikTokMod 47.7.0 V3 — 42 features implemented per DYLIB-DESIGN.md §4. "
                @"Compile-verified only: no iOS device exists on the build VM, so no hook is "
                @"runtime-tested — test on a secondary account only. Series unlock is impossible "
                @"and is never attempted (hide only). UNVERIFIED rows lift a client limit the "
-               @"server may still enforce — do not present them as working.";
+               @"server may still enforce — do not present them as working. HARD phase "
+               @"(#10 #18 #25 downloads, #27 ads) is UNVERIFIED-RUNTIME: the pinning bypass "
+               @"covers ObjC surfaces only and is unproven without a traffic capture; #24 region "
+               @"is PARTIAL (server decides the feed); #44 watermark-free stays DEFERRED and OFF.";
     }
     return nil;
 }
@@ -709,6 +738,21 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
         }
         [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
         [self presentActionSheet:sheet];
+    } else if ([rowId isEqualToString:@"qualityPicker"]) {
+        [TikTokModHard downloadCurrentVideoFromViewController:self];
+    } else if ([rowId isEqualToString:@"webSource"]) {
+        [TikTokModHard downloadFromWebSourceFromViewController:self];
+    } else if ([rowId isEqualToString:@"audioDownload"]) {
+        [TikTokModHard downloadCurrentAudioFromViewController:self];
+    } else if ([rowId isEqualToString:@"pinningStatus"]) {
+        UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Pinning-bypass status (HARD gate)"
+            message:[[TikTokModHard pinningBypassStatus]
+                stringByAppendingString:@"\n\nUNVERIFIED-RUNTIME: only a traffic capture showing Aweme API JSON proves the bypass. The TTNet native libvcn/boringssl layer is NOT covered."]
+            preferredStyle:UIAlertControllerStyleAlert];
+        [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:a animated:YES completion:nil];
+    } else if ([rowId isEqualToString:@"regionPicker"]) {
+        [TikTokModHard pickRegionFromViewController:self];
     }
 }
 
