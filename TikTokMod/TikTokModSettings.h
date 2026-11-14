@@ -102,6 +102,13 @@ extern NSString * const TikTokModSettingsDidChangeNotification;
 /// #7 — flash color hex (default #FFFFFF).
 @property (nonatomic, copy, nullable) NSString *frontFlashColorHex;
 
+/// #10 — last picked playAddr variant, or @"auto" (default). Skips the
+/// quality picker ("skip quality") when set to a variant.
+@property (nonatomic, copy, nullable) NSString *downloadQualityChoice;
+/// #24 — ISO country code the client reports (nil = stock region). PARTIAL:
+/// the server decides the feed; this only changes what the client reports.
+@property (nonatomic, copy, nullable) NSString *regionCode;
+
 // --- #45 Custom Background (Mustafa's own request, not from TikTok You) ---
 // Toggle itself is the `customBackground` BOOL property (registry #45).
 // Mode: @"image" | @"color" | @"none". Image is stored as a JPEG file under

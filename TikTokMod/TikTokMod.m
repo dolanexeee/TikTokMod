@@ -6,12 +6,14 @@
 #import "TikTokModSettings.h"
 #import "TikTokModV1.h"
 #import "TikTokModV2.h"
+#import "TikTokModHard.h"
 
 __attribute__((constructor))
 static void TikTokModInit(void) {
     @autoreleasepool {
         NSLog(@"TikTokMod loaded");
-        NSLog(@"[TikTokMod] TikTokMod loaded (47.7.0 V2, 37 features per DYLIB-DESIGN.md §4)");
+        NSLog(@"[TikTokMod] TikTokMod loaded (47.7.0 V3, 42 features per DYLIB-DESIGN.md §4; "
+              @"HARD phase UNVERIFIED-RUNTIME — pinning bypass unproven without a traffic capture)");
         [TikTokMod installHooks];
     }
 }
@@ -25,9 +27,11 @@ static void TikTokModInit(void) {
     // not yet loaded. Behaviour is gated per call by the live toggle.
     [TikTokModV1 installV1Hooks];
     [TikTokModV2 installV2Hooks];
+    [TikTokModHard installHardHooks];
     (void)[TikTokModSettings shared];
-    NSLog(@"[TikTokMod] installHooks: V1+V2 installed (42 toggle slots registered; "
-          @"compile-verified only — no iOS device on the build VM, nothing runtime-tested)");
+    NSLog(@"[TikTokMod] installHooks: V1+V2+HARD installed (42 toggle slots registered; "
+          @"compile-verified only — no iOS device on the build VM, nothing runtime-tested; "
+          @"HARD downloads UNVERIFIED-RUNTIME, #24 PARTIAL, #44 DEFER)");
 }
 
 + (nullable Class)safeClass:(NSString *)className {

@@ -51,21 +51,21 @@ static const NSInteger kTMCustomBackgroundTag = 7008;
         @{@"num": @7, @"key": @"cameraExtras", @"title": @"Camera extras: teleprompter, green screen, selfie flash, AI meme", @"section": @"Posting & Camera", @"unverified": @NO, @"note": @"Colored selfie flash is EXPERIMENTAL (PARTIAL — frontFlashColor is a real field, not a proven toggle). Configure it in its hub row."},
         @{@"num": @8, @"key": @"antiBurnInHideSystemBars", @"title": @"Anti-burn-in hides system bars (translucent, adjustable opacity)", @"section": @"Player", @"unverified": @NO},
         @{@"num": @9, @"key": @"redesignedModSettings", @"title": @"Redesigned mod settings (hub layout)", @"section": @"Mod", @"unverified": @NO},
-        @{@"num": @10, @"key": @"downloadQualitySelection", @"title": @"Download quality selection (manual pick + skip-quality)", @"section": @"Downloads", @"unverified": @NO},
+        @{@"num": @10, @"key": @"downloadQualitySelection", @"title": @"Download quality selection (manual pick + skip-quality)", @"section": @"Downloads", @"unverified": @YES, @"note": @"UNVERIFIED-RUNTIME — needs a runtime traffic capture (pinning bypass unproven); the picker is built from captured playAddr variants, no stock picker exists."},
         @{@"num": @13, @"key": @"commentReposts", @"title": @"Comment reposts", @"section": @"Chats & Comments", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
         @{@"num": @14, @"key": @"bannersNewProfileLayout", @"title": @"Banners unlocked (new profile layout DEFERRED — no gate found)", @"section": @"Profile & Appearance", @"unverified": @NO, @"note": @"Banners only. The layout half has no evidence in either research pass — do not claim it."},
         @{@"num": @16, @"key": @"automaticStreaks", @"title": @"Automatic streaks — recipients + sticker, configurable timing", @"section": @"Chats & Comments", @"unverified": @NO},
         @{@"num": @17, @"key": @"sendPinLimitRemoval", @"title": @"Removed limits on sending videos + pinning chats", @"section": @"Chats & Comments", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
-        @{@"num": @18, @"key": @"downloadWebSources", @"title": @"Downloads: web sources in source picker", @"section": @"Downloads", @"unverified": @NO},
+        @{@"num": @18, @"key": @"downloadWebSources", @"title": @"Downloads: web sources in source picker", @"section": @"Downloads", @"unverified": @YES, @"note": @"UNVERIFIED-RUNTIME — webSource evidence is weak (4 hits); the picker is dylib-built. A pasted direct URL needs no capture and works even if the bypass is unproven."},
         @{@"num": @19, @"key": @"offlineVideoLimit", @"title": @"Offline video limit (tunes the offline fetch count)", @"section": @"Downloads", @"unverified": @NO, @"note": @"No iOS twin of Android's \"2,000\" exists — the count path is tuned instead (default 500, hub row)."},
         @{@"num": @20, @"key": @"appIconSelection", @"title": @"App icon selection (7 launcher styles)", @"section": @"Profile & Appearance", @"unverified": @NO, @"note": @"Icon sets must exist in the bundle at assembly time (TikTokMod/Icons/ + CFBundleAlternateIcons)."},
         @{@"num": @21, @"key": @"postDatesForYou", @"title": @"Post dates shown in the For You feed", @"section": @"Feed & Discovery", @"unverified": @NO},
         @{@"num": @22, @"key": @"contentFilters", @"title": @"Content filters — words, tags, likes, views", @"section": @"Feed & Discovery", @"unverified": @NO},
         @{@"num": @23, @"key": @"stickerDownloads", @"title": @"Sticker downloads", @"section": @"Downloads", @"unverified": @NO},
-        @{@"num": @24, @"key": @"regionSwitching", @"title": @"Region switching (268 flags)", @"section": @"Feed & Discovery", @"unverified": @NO},
-        @{@"num": @25, @"key": @"audioOnlyDownload", @"title": @"Audio-only download (to Music/TikTok)", @"section": @"Downloads", @"unverified": @NO},
+        @{@"num": @24, @"key": @"regionSwitching", @"title": @"Region switching (268 flags)", @"section": @"Feed & Discovery", @"unverified": @NO, @"note": @"PARTIAL — the client reports a different region (locale/carrier/sys_region path); the server decides the feed (IP, SIM, account). Never promise a region change."},
+        @{@"num": @25, @"key": @"audioOnlyDownload", @"title": @"Audio-only download (to Music/TikTok)", @"section": @"Downloads", @"unverified": @YES, @"note": @"UNVERIFIED-RUNTIME — needs a runtime traffic capture; saves the music play URL's bytes to Documents/TikTokMod/Music/."},
         @{@"num": @26, @"key": @"repostCharacterLimitRemoval", @"title": @"Removed character limit on reposts", @"section": @"Posting & Camera", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
-        @{@"num": @27, @"key": @"adBlocking", @"title": @"Ad blocking / clean feed", @"section": @"Feed & Discovery", @"unverified": @NO},
+        @{@"num": @27, @"key": @"adBlocking", @"title": @"Ad blocking / clean feed", @"section": @"Feed & Discovery", @"unverified": @YES, @"note": @"UNVERIFIED-RUNTIME — the ad-marker accessor (isAd/adInfo) is not confirmed; the filter drops an item ONLY on a verified isAd=YES read, never on a guess, so it may drop nothing until runtime inspection identifies the field."},
         @{@"num": @28, @"key": @"hideStory", @"title": @"Hide story", @"section": @"Player", @"unverified": @NO},
         @{@"num": @29, @"key": @"hideUIOpacity", @"title": @"Hide UI with opacity control", @"section": @"Player", @"unverified": @NO},
         @{@"num": @30, @"key": @"videoSliderSeekBar", @"title": @"Video slider / seek bar", @"section": @"Player", @"unverified": @NO},
@@ -259,6 +259,15 @@ static const NSInteger kTMCustomBackgroundTag = 7008;
     return hex.length > 0 ? hex : @"#FFFFFF";
 }
 - (void)setFrontFlashColorHex:(nullable NSString *)value { [self setString:value forKey:@"frontFlashColorHex"]; }
+
+// --- HARD value keys (DYLIB-DESIGN.md §2.3) ---
+- (nullable NSString *)downloadQualityChoice {
+    NSString *choice = [self stringForKey:@"downloadQualityChoice"];
+    return choice.length > 0 ? choice : @"auto";
+}
+- (void)setDownloadQualityChoice:(nullable NSString *)value { [self setString:value forKey:@"downloadQualityChoice"]; }
+- (nullable NSString *)regionCode { return [self stringForKey:@"regionCode"]; }
+- (void)setRegionCode:(nullable NSString *)value { [self setString:value forKey:@"regionCode"]; }
 
 - (BOOL)interfaceEditor { return [self boolForKey:@"interfaceEditor"]; }
 - (void)setInterfaceEditor:(BOOL)value { [self setBool:value forKey:@"interfaceEditor"]; }
