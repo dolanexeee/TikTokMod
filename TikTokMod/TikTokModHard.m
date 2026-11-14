@@ -1085,6 +1085,112 @@ static NSString * _Nullable TM3CurrentAudioURL(void) {
 }
 
 // ---------------------------------------------------------------------------
+// #27 Ad blocking / clean feed
+// Choke point (design §3 #27): AWEFeedAdController +preprocessAwemes:
+// withAwemeType: (class method). The filter hook is installed ONLY when that
+// method returns an object (the array to filter) — a void return would make
+// filtering impossible, so the hook is skipped with a log instead of
+// guessing. +preprocessAweme:withFeedScene: and +awemeReceived:withAwemeType:
+// are hooked log-only (call through, observe).
+//
+// AD-MARKER RULE (binding, design §5 item 3): the exact ObjC accessor for
+// the ad flag on AWEAwemeModel is UNVERIFIED — isAd/adInfo are string-level
+// names from R2, not confirmed selectors. The predicate therefore drops an
+// item ONLY when an isAd/is_ad key reads YES as an NSNumber BOOL. Anything
+// else is logged, never dropped. The first inspected item also logs a probe
+// of which marker keys exist, so a runtime run can identify the real field.
+// Two extra fail-soft guards: (1) if the filter would drop EVERYTHING, the
+// original list is returned instead (a wrong filter must never blank the
+// feed); (2) the V1 filteredDataSource fallback uses the same predicate.
+// Ad UI hiding (AWEAdFeedDrawerButton / AWEAdFeedLearnMoreView) runs in
+// +hideAdViewsInView:, called from V1's applyCellOverlays.
+// ---------------------------------------------------------------------------
+
+static IMP g3_orig_FeedAd_preprocessAwemes = NULL;
+static IMP g3_orig_FeedAd_preprocessAweme = NULL;
+static IMP g3_orig_FeedAd_awemeReceived = NULL;
+static BOOL g3_installed_FeedAd_preprocessAwemes = NO;
+static BOOL g3_installed_FeedAd_preprocessAweme = NO;
+static BOOL g3_installed_FeedAd_awemeReceived = NO;
+static BOOL g3_adProbeLogged = NO;
+
+/// Install only when the method returns an object. Used for
+/// +preprocessAwemes:withAwemeType:, whose array return is what the filter
+/// needs.
+static BOOL TM3InstallSiteIfObjectReturn(NSString *className, SEL origSel, IMP newImp, IMP *outOrig, BOOL classMethod) {
+    Class cls = [TikTokMod safeClass:className];
+    if (!cls) return NO;
+    Method m = classMethod ? class_getClassMethod(cls, origSel) : class_getInstanceMethod(cls, origSel);
+    if (!m) {
+        NSLog(@"[TikTokMod] HARD site %@ %@ not found, skipping (fail-soft)",
+              className, NSStringFromSelector(origSel));
+        return NO;
+    }
+    const char *enc = method_getTypeEncoding(m);
+    char got = enc ? enc[0] : '?';
+    if (got != '@') {
+        NSLog(@"[TikTokMod] HARD site %@ %@: return type '%c', not object — the ad filter needs "
+              @"the array return, skipping (fail-soft)", className, NSStringFromSelector(origSel), got);
+        return NO;
+    }
+    return TM3InstallSite(className, origSel, newImp, outOrig, classMethod, '@');
+}
+
+static id TM3Hook_FeedAd_preprocessAwemes(id self, SEL _cmd, id awemes, id type) {
+    id orig = ((id (*)(id, SEL, id, id))g3_orig_FeedAd_preprocessAwemes)(self, _cmd, awemes, type);
+    if (!TM3On(@"adBlocking") || ![orig isKindOfClass:[NSArray class]]) return orig;
+    NSArray *arr = (NSArray *)orig;
+    NSMutableArray *kept = [NSMutableArray arrayWithCapacity:arr.count];
+    NSUInteger dropped = 0;
+    for (id item in arr) {
+        if ([TikTokModHard shouldDropAdItem:item]) dropped++;
+        else [kept addObject:item];
+    }
+    if (dropped == 0) return orig;
+    NSLog(@"[TikTokMod] #27 preprocessAwemes: dropped %lu ad item(s) of %lu",
+          (unsigned long)dropped, (unsigned long)arr.count);
+    if (kept.count == 0) {
+        NSLog(@"[TikTokMod] #27 refusing to blank the feed (filter would drop everything) — "
+              @"returning the original list (fail-soft)");
+        return orig;
+    }
+    return [kept copy];
+}
+
+static void TM3Hook_FeedAd_preprocessAweme(id self, SEL _cmd, id aweme, id scene) {
+    if (TM3On(@"adBlocking") && [TikTokModHard shouldDropAdItem:aweme]) {
+        NSLog(@"[TikTokMod] #27 preprocessAweme: single ad item observed (not dropped here — "
+              @"the plural preprocessAwemes: hook owns filtering)");
+    }
+    ((void (*)(id, SEL, id, id))g3_orig_FeedAd_preprocessAweme)(self, _cmd, aweme, scene);
+}
+
+static void TM3Hook_FeedAd_awemeReceived(id self, SEL _cmd, id aweme, id type) {
+    if (TM3On(@"adBlocking") && [TikTokModHard shouldDropAdItem:aweme]) {
+        NSLog(@"[TikTokMod] #27 awemeReceived: ad item observed");
+    }
+    ((void (*)(id, SEL, id, id))g3_orig_FeedAd_awemeReceived)(self, _cmd, aweme, type);
+}
+
+static void TM3InstallAdBlocking(void) {
+    if (!g3_installed_FeedAd_preprocessAwemes) {
+        g3_installed_FeedAd_preprocessAwemes = TM3InstallSiteIfObjectReturn(@"AWEFeedAdController",
+            NSSelectorFromString(@"preprocessAwemes:withAwemeType:"),
+            (IMP)TM3Hook_FeedAd_preprocessAwemes, &g3_orig_FeedAd_preprocessAwemes, YES);
+    }
+    if (!g3_installed_FeedAd_preprocessAweme) {
+        g3_installed_FeedAd_preprocessAweme = TM3InstallSite(@"AWEFeedAdController",
+            NSSelectorFromString(@"preprocessAweme:withFeedScene:"),
+            (IMP)TM3Hook_FeedAd_preprocessAweme, &g3_orig_FeedAd_preprocessAweme, YES, '?');
+    }
+    if (!g3_installed_FeedAd_awemeReceived) {
+        g3_installed_FeedAd_awemeReceived = TM3InstallSite(@"AWEFeedAdController",
+            NSSelectorFromString(@"awemeReceived:withAwemeType:"),
+            (IMP)TM3Hook_FeedAd_awemeReceived, &g3_orig_FeedAd_awemeReceived, YES, '?');
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Feature bodies — filled in per feature commit (F: #27).
 // Until then each is a safe no-op that says so.
 // ---------------------------------------------------------------------------
@@ -1121,6 +1227,7 @@ static NSString *g3_lastWebSourceURL = nil;
     TM3InstallWebSources();
     TM3InstallRegion();
     TM3InstallAudio();
+    TM3InstallAdBlocking();
 }
 
 + (NSString *)pinningBypassStatus {
@@ -1137,13 +1244,41 @@ static NSString *g3_lastWebSourceURL = nil;
     return [parts componentsJoinedByString:@" • "];
 }
 
-+ (BOOL)shouldDropAdItem:(__unused id)item {
-    // Filled in commit F (#27).
++ (BOOL)shouldDropAdItem:(id)item {
+    if (!item || !TM3On(@"adBlocking")) return NO;
+    if (!g3_adProbeLogged) {
+        g3_adProbeLogged = YES;
+        // Runtime inspection probe: which ad-marker keys actually exist on a
+        // real feed item? The accessor is unverified in the evidence files —
+        // this log is what identifies the real field on device.
+        for (NSString *key in @[@"isAd", @"is_ad", @"adInfo", @"adId"]) {
+            BOOL exists = NO;
+            id v = nil;
+            @try { v = [item valueForKey:key]; exists = YES; } @catch (__unused NSException *e) { exists = NO; }
+            NSLog(@"[TikTokMod] #27 ad-marker probe: %@ exists=%@ valueClass=%@",
+                  key, exists ? @"YES" : @"NO", v ? NSStringFromClass([v class]) : @"-");
+        }
+    }
+    // Drop ONLY on a verified isAd/is_ad BOOL read of YES. adInfo/adId alone
+    // never drop anything — the design forbids dropping on a guess.
+    for (NSString *key in @[@"isAd", @"is_ad"]) {
+        id v = TM3Value(item, key);
+        if ([v isKindOfClass:[NSNumber class]] && [v boolValue]) {
+            NSLog(@"[TikTokMod] #27 dropping ad item (%@=YES)", key);
+            return YES;
+        }
+    }
     return NO;
 }
 
-+ (void)hideAdViewsInView:(__unused UIView *)cellView {
-    // Filled in commit F (#27).
++ (void)hideAdViewsInView:(UIView *)cellView {
+    if (!cellView || !TM3On(@"adBlocking")) return;
+    TM3WalkViews(cellView, ^(UIView *v) {
+        if (TM3ClassNameContains(v, @"AdFeed") || TM3ClassNameContains(v, @"AdLearnMore") ||
+            TM3ClassNameContains(v, @"AdDrawer")) {
+            v.hidden = YES;
+        }
+    });
 }
 
 + (NSDictionary<NSString *, NSString *> *)currentVideoQualityURLs {

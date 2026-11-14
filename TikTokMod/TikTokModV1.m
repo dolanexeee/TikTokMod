@@ -11,6 +11,7 @@
 #import "TikTokModHub.h"
 #import "TikTokModSettings.h"
 #import "TikTokModV2.h"
+#import "TikTokModHard.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
 
@@ -625,6 +626,10 @@ static void TMShowHidePromptForView(UIView *hitView) {
             if (TMClassNameContains(v, @"PaidContentPreviewTag")) v.hidden = YES;
         });
     }
+    // #27 — hide ad UI views (feed drawer button / learn-more / drawer).
+    if (TMOn(@"adBlocking")) {
+        [TikTokModHard hideAdViewsInView:cellView];
+    }
     // #36 — hide like/comment count labels (tap targets stay).
     if (TMOn(@"hideLikeViewCounts")) {
         TMWalkViews(cellView, ^(UIView *v) {
@@ -1101,7 +1106,8 @@ static id TMHook_DataSource_filteredDataSource(id self, SEL _cmd) {
     BOOL hideLive = TMOn(@"hideLiveEntries");
     BOOL hideSeries = TMOn(@"hideSeriesRows");
     BOOL v2Filters = TMOn(@"contentFilters");
-    if (!hidePhoto && !hideLive && !hideSeries && !v2Filters) return orig;
+    BOOL adBlock = TMOn(@"adBlocking");
+    if (!hidePhoto && !hideLive && !hideSeries && !v2Filters && !adBlock) return orig;
     NSMutableArray *kept = [NSMutableArray arrayWithCapacity:orig.count];
     for (id item in orig) {
         BOOL drop = NO;
@@ -1112,10 +1118,14 @@ static id TMHook_DataSource_filteredDataSource(id self, SEL _cmd) {
         if (!drop && hideSeries && TMBoolValue(item, @"is_series")) drop = YES;
         // #22 (V2) — words/tags/likes/views predicate (toggle-gated inside).
         if (!drop && v2Filters && [TikTokModV2 shouldDropFeedItem:item]) drop = YES;
+        // #27 (HARD) — ad filter fallback when the preprocessAwemes: hook
+        // misses; same conservative predicate (drops only on a verified
+        // isAd=YES read, never on a guess).
+        if (!drop && adBlock && [TikTokModHard shouldDropAdItem:item]) drop = YES;
         if (!drop) [kept addObject:item];
     }
     if (kept.count != orig.count) {
-        NSLog(@"[TikTokMod] filteredDataSource: %lu -> %lu items (photo/live/series/#22 hides)",
+        NSLog(@"[TikTokMod] filteredDataSource: %lu -> %lu items (photo/live/series/#22/#27 hides)",
               (unsigned long)orig.count, (unsigned long)kept.count);
     }
     return [kept copy];
