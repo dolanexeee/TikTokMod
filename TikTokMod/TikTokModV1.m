@@ -917,33 +917,10 @@ static void TMShowHidePromptForView(UIView *hitView) {
 @end
 
 // ---------------------------------------------------------------------------
-// Forward declarations for TikTok classes (no headers exist for them).
-// Superclasses are the closest known UIKit type; only the category methods
-// below are ever called on these types. At runtime the real classes are
-// resolved with NSClassFromString, so a wrong superclass here cannot crash.
 // ---------------------------------------------------------------------------
-@interface AWEFeedRootViewController : UIViewController @end
-@interface AWEFeedContainerViewController : UIViewController @end
-@interface AWEFeedViewCell : UIView @end
-@interface AWEVideoPlayerController : NSObject @end
-@interface TTVideoEngine : NSObject @end
-@interface TTKMediaPiPController : NSObject @end
-@interface TTPictureInPictureController : NSObject @end
-@interface TTKFeedAppDiffComponent : NSObject @end
-@interface AWEIMModuleService : NSObject @end
-@interface TTKStory2FeedOverlayViewComponent : NSObject @end
-@interface AWEAwemeModel : NSObject @end
-@interface AWEListDataController : NSObject @end
-@interface TTKStandardProfileBannerContainer : UIView @end
-@interface TTKPhotoModeCommentEntranceView : UIView @end
-@interface AWEManagedStreakView : UIView @end
-@interface _TtC17TikTokIMImplSwift24AWEIMExtensionStreakInfo : NSObject @end
-@interface AWEFeedPaidContentPreviewTagView : UIView @end
-@interface AppDelegate : NSObject @end
-
-// ---------------------------------------------------------------------------
-// Swizzled implementations (categories on TikTok classes).
-// Each method reads its live toggle per call and falls through to stock when OFF.
+// Swizzled implementations.
+// The UIViewController dispatcher below is a category on UIKit (linked, fine).
+// TikTok classes are hooked at runtime (see the Runtime hooks section).
 // ---------------------------------------------------------------------------
 
 static const NSInteger kTMTagDrawButton = 7011;
@@ -991,201 +968,133 @@ static const NSInteger kTMTagDrawButton = 7011;
 
 @end
 
+// ---------------------------------------------------------------------------
+// Runtime hooks (NO ObjC categories on TikTok classes).
+// WHY: a category on an external class emits a link-time _OBJC_CLASS_$_<class>
+// reference, and TikTok's classes live in MusicallyCore, not in this dylib —
+// the link fails. Runtime injection (class_addMethod + IMP swap) references
+// the class only through NSClassFromString at runtime, so a missing class is
+// a logged no-op, never a link error or a crash.
+// Each site stores its original IMP in a static; the replacement IMP calls
+// through it when the toggle is OFF.
+// ---------------------------------------------------------------------------
+
+static IMP g_orig_Container_viewDidLoad = NULL;
+static IMP g_orig_Root_viewDidLoad = NULL;
+static IMP g_orig_Root_prefersStatusBarHidden = NULL;
+static IMP g_orig_Cell_setupViewController = NULL;
+static IMP g_orig_Player_setPlaybackRate = NULL;
+static IMP g_orig_Player_setCurrentPlaybackRate = NULL;
+static IMP g_orig_Player_seekToTime = NULL;
+static IMP g_orig_Engine_setPlaybackSpeed = NULL;
+static IMP g_orig_PiP1_supported = NULL;
+static IMP g_orig_PiP2_supported = NULL;
+static IMP g_orig_PiPGate = NULL;
+static IMP g_orig_ReadAllEnable = NULL;
+static IMP g_orig_StoryMount = NULL;
+static IMP g_orig_StoryBar = NULL;
+static IMP g_orig_DataSource = NULL;
+static IMP g_orig_BannerLayout = NULL;
+static IMP g_orig_PhotoButton = NULL;
+static IMP g_orig_LiveBadge = NULL;
+static IMP g_orig_StreakView = NULL;
+static IMP g_orig_StreakSwitch = NULL;
+static IMP g_orig_SeriesTagSetup = NULL;
+static IMP g_orig_AppDidFinishLaunching = NULL;
+
 // --- Feed root / container ---
-@interface AWEFeedRootViewController (TikTokModV1)
-- (void)tm_viewDidLoad;
-- (BOOL)tm_prefersStatusBarHidden;
-@end
+static void TMHook_Container_viewDidLoad(id self, SEL _cmd) {
+    ((void (*)(id, SEL))g_orig_Container_viewDidLoad)(self, _cmd);
+    [TikTokModV1 tm_feedContainerAppeared:(UIViewController *)self];
+}
 
-@implementation AWEFeedRootViewController (TikTokModV1)
-
-- (void)tm_viewDidLoad {
-    [self tm_viewDidLoad];
+static void TMHook_Root_viewDidLoad(id self, SEL _cmd) {
+    ((void (*)(id, SEL))g_orig_Root_viewDidLoad)(self, _cmd);
     [TikTokModV1 retryDeferredInstalls];
 }
 
-- (BOOL)tm_prefersStatusBarHidden {
+static BOOL TMHook_Root_prefersStatusBarHidden(id self, SEL _cmd) {
     // #8 / #39: hide the real status bar while the overlay/fake bar is up.
     if (TMOn(@"antiBurnInHideSystemBars") || TMOn(@"fakeStatusBarPreview")) return YES;
-    return [self tm_prefersStatusBarHidden];
+    return ((BOOL (*)(id, SEL))g_orig_Root_prefersStatusBarHidden)(self, _cmd);
 }
-
-@end
-
-@interface AWEFeedContainerViewController (TikTokModV1)
-- (void)tm_viewDidLoad;
-- (BOOL)tm_shouldShowLiveBadge;
-@end
-
-@implementation AWEFeedContainerViewController (TikTokModV1)
-
-- (void)tm_viewDidLoad {
-    [self tm_viewDidLoad];
-    [TikTokModV1 tm_feedContainerAppeared:self];
-}
-
-- (BOOL)tm_shouldShowLiveBadge {
-    // #35: hide the live badge.
-    if (TMOn(@"hideLiveEntries")) return NO;
-    return [self tm_shouldShowLiveBadge];
-}
-
-@end
 
 // --- Feed cell ---
-@interface AWEFeedViewCell (TikTokModV1)
-- (void)tm_setupViewController;
-@end
-
-@implementation AWEFeedViewCell (TikTokModV1)
-
-- (void)tm_setupViewController {
-    [self tm_setupViewController];
-    if ([self isKindOfClass:[UIView class]]) {
+static void TMHook_Cell_setupViewController(id self, SEL _cmd) {
+    ((void (*)(id, SEL))g_orig_Cell_setupViewController)(self, _cmd);
+    if ([(id)self isKindOfClass:[UIView class]]) {
         [TikTokModV1 applyCellOverlays:(UIView *)self];
     }
 }
 
-@end
-
 // --- Player: speed (#2) + active-player tracking (#30) ---
-@interface AWEVideoPlayerController (TikTokModV1)
-- (void)tm_setPlaybackRate:(float)rate;
-- (void)tm_setCurrentPlaybackRate:(float)rate;
-- (void)tm_seekToTime:(double)time shouldPlay:(BOOL)play;
-@end
-
-@implementation AWEVideoPlayerController (TikTokModV1)
-
-- (void)tm_setPlaybackRate:(float)rate {
+static void TMHook_Player_setPlaybackRate(id self, SEL _cmd, float rate) {
     g_activePlayer = self;
     if (TMOn(@"playbackSpeed3x")) {
-        float want = [TMSettings() playbackRateValue];
-        [self tm_setPlaybackRate:want];
+        ((void (*)(id, SEL, float))g_orig_Player_setPlaybackRate)(self, _cmd, [TMSettings() playbackRateValue]);
         return;
     }
-    [self tm_setPlaybackRate:rate];
+    ((void (*)(id, SEL, float))g_orig_Player_setPlaybackRate)(self, _cmd, rate);
 }
 
-- (void)tm_setCurrentPlaybackRate:(float)rate {
+static void TMHook_Player_setCurrentPlaybackRate(id self, SEL _cmd, float rate) {
     g_activePlayer = self;
     if (TMOn(@"playbackSpeed3x")) {
-        [self tm_setCurrentPlaybackRate:[TMSettings() playbackRateValue]];
+        ((void (*)(id, SEL, float))g_orig_Player_setCurrentPlaybackRate)(self, _cmd, [TMSettings() playbackRateValue]);
         return;
     }
-    [self tm_setCurrentPlaybackRate:rate];
+    ((void (*)(id, SEL, float))g_orig_Player_setCurrentPlaybackRate)(self, _cmd, rate);
 }
 
-- (void)tm_seekToTime:(double)time shouldPlay:(BOOL)play {
+static void TMHook_Player_seekToTime(id self, SEL _cmd, double time, BOOL play) {
     g_activePlayer = self;
-    [self tm_seekToTime:time shouldPlay:play];
+    ((void (*)(id, SEL, double, BOOL))g_orig_Player_seekToTime)(self, _cmd, time, play);
 }
 
-@end
-
-@interface TTVideoEngine (TikTokModV1)
-- (void)tm_setPlaybackSpeed:(float)speed;
-@end
-
-@implementation TTVideoEngine (TikTokModV1)
-
-- (void)tm_setPlaybackSpeed:(float)speed {
+static void TMHook_Engine_setPlaybackSpeed(id self, SEL _cmd, float speed) {
     if (TMOn(@"playbackSpeed3x")) speed = [TMSettings() playbackRateValue];
-    [self tm_setPlaybackSpeed:speed];
+    ((void (*)(id, SEL, float))g_orig_Engine_setPlaybackSpeed)(self, _cmd, speed);
 }
-
-@end
 
 // --- PiP (#3): force the stock gates open ---
-@interface TTKMediaPiPController (TikTokModV1)
-- (BOOL)tm_isPictureInPictureSupported;
-@end
-
-@implementation TTKMediaPiPController (TikTokModV1)
-
-- (BOOL)tm_isPictureInPictureSupported {
+static BOOL TMHook_PiP_supported(id self, SEL _cmd, IMP orig) {
     if (TMOn(@"pictureInPicture")) return YES;
-    return [self tm_isPictureInPictureSupported];
+    return ((BOOL (*)(id, SEL))orig)(self, _cmd);
 }
 
-@end
-
-@interface TTPictureInPictureController (TikTokModV1)
-- (BOOL)tm_isPictureInPictureSupported;
-@end
-
-@implementation TTPictureInPictureController (TikTokModV1)
-
-- (BOOL)tm_isPictureInPictureSupported {
-    if (TMOn(@"pictureInPicture")) return YES;
-    return [self tm_isPictureInPictureSupported];
+static BOOL TMHook_PiP1_supported(id self, SEL _cmd) {
+    return TMHook_PiP_supported(self, _cmd, g_orig_PiP1_supported);
 }
 
-@end
-
-@interface TTKFeedAppDiffComponent (TikTokModV1)
-- (BOOL)tm_feedPictureInPictureEntrance;
-@end
-
-@implementation TTKFeedAppDiffComponent (TikTokModV1)
-
-- (BOOL)tm_feedPictureInPictureEntrance {
-    if (TMOn(@"pictureInPicture")) return YES;
-    return [self tm_feedPictureInPictureEntrance];
+static BOOL TMHook_PiP2_supported(id self, SEL _cmd) {
+    return TMHook_PiP_supported(self, _cmd, g_orig_PiP2_supported);
 }
 
-@end
+static BOOL TMHook_PiPGate(id self, SEL _cmd) {
+    if (TMOn(@"pictureInPicture")) return YES;
+    return ((BOOL (*)(id, SEL))g_orig_PiPGate)(self, _cmd);
+}
 
 // --- Read-all (#4): force the stock enable flag (class method) ---
-@interface AWEIMModuleService (TikTokModV1)
-+ (BOOL)tm_inboxReadAllEnable;
-@end
-
-@implementation AWEIMModuleService (TikTokModV1)
-
-+ (BOOL)tm_inboxReadAllEnable {
+static BOOL TMHook_ReadAllEnable(id self, SEL _cmd) {
     if (TMOn(@"readAllChats")) return YES;
-    return [self tm_inboxReadAllEnable];
+    return ((BOOL (*)(id, SEL))g_orig_ReadAllEnable)(self, _cmd);
 }
-
-@end
 
 // --- Story (#28) ---
-@interface TTKStory2FeedOverlayViewComponent (TikTokModV1)
-- (void)tm_componentMount;
-@end
-
-@implementation TTKStory2FeedOverlayViewComponent (TikTokModV1)
-
-- (void)tm_componentMount {
+static void TMHook_StoryMount(id self, SEL _cmd) {
     if (TMOn(@"hideStory")) return; // suppress the story overlay entirely
-    [self tm_componentMount];
+    ((void (*)(id, SEL))g_orig_StoryMount)(self, _cmd);
 }
 
-@end
-
-@interface AWEAwemeModel (TikTokModV1)
-- (BOOL)tm_hideStoryBottomBar;
-@end
-
-@implementation AWEAwemeModel (TikTokModV1)
-
-- (BOOL)tm_hideStoryBottomBar {
+static BOOL TMHook_StoryBar(id self, SEL _cmd) {
     if (TMOn(@"hideStory")) return YES;
-    return [self tm_hideStoryBottomBar];
+    return ((BOOL (*)(id, SEL))g_orig_StoryBar)(self, _cmd);
 }
-
-@end
 
 // --- Data source filter (#34 photo, #35 live, #43 series) ---
-@interface AWEListDataController (TikTokModV1)
-- (NSArray *)tm_filteredDataSource;
-@end
-
-@implementation AWEListDataController (TikTokModV1)
-
-- (NSArray *)tm_filteredDataSource {
-    NSArray *orig = [self tm_filteredDataSource];
+static id TMHook_DataSource_filteredDataSource(id self, SEL _cmd) {
+    NSArray *orig = ((id (*)(id, SEL))g_orig_DataSource)(self, _cmd);
     if (!orig) return orig;
     BOOL hidePhoto = TMOn(@"hidePhotoMode");
     BOOL hideLive = TMOn(@"hideLiveEntries");
@@ -1208,19 +1117,11 @@ static const NSInteger kTMTagDrawButton = 7011;
     return [kept copy];
 }
 
-@end
-
 // --- Banners (#14, banners only — layout half is DEFER) ---
-@interface TTKStandardProfileBannerContainer (TikTokModV1)
-- (void)tm_layoutSubviews;
-@end
-
-@implementation TTKStandardProfileBannerContainer (TikTokModV1)
-
-- (void)tm_layoutSubviews {
-    [self tm_layoutSubviews];
+static void TMHook_BannerLayout(id self, SEL _cmd) {
+    ((void (*)(id, SEL))g_orig_BannerLayout)(self, _cmd);
     if (!TMOn(@"bannersNewProfileLayout")) return;
-    for (UIView *sub in self.subviews) {
+    for (UIView *sub in ((UIView *)self).subviews) {
         if ([NSStringFromClass([sub class]) containsString:@"Banner"]) {
             sub.hidden = NO;
             sub.alpha = 1.0;
@@ -1228,93 +1129,61 @@ static const NSInteger kTMTagDrawButton = 7011;
     }
 }
 
-@end
-
 // --- Photo-mode entry (#34) ---
-@interface TTKPhotoModeCommentEntranceView (TikTokModV1)
-- (void)tm_setShouldShowPhotoButton:(BOOL)show;
-@end
-
-@implementation TTKPhotoModeCommentEntranceView (TikTokModV1)
-
-- (void)tm_setShouldShowPhotoButton:(BOOL)show {
+static void TMHook_PhotoButton(id self, SEL _cmd, BOOL show) {
     if (TMOn(@"hidePhotoMode")) show = NO;
-    [self tm_setShouldShowPhotoButton:show];
+    ((void (*)(id, SEL, BOOL))g_orig_PhotoButton)(self, _cmd, show);
 }
 
-@end
+// --- Live badge (#35) ---
+static BOOL TMHook_LiveBadge(id self, SEL _cmd) {
+    if (TMOn(@"hideLiveEntries")) return NO;
+    return ((BOOL (*)(id, SEL))g_orig_LiveBadge)(self, _cmd);
+}
 
 // --- Streak badges (#37) ---
-@interface AWEManagedStreakView (TikTokModV1)
-- (void)tm_updateStreakModel:(id)model;
-@end
-
-@implementation AWEManagedStreakView (TikTokModV1)
-
-- (void)tm_updateStreakModel:(id)model {
+static void TMHook_StreakView(id self, SEL _cmd, id model) {
     if (TMOn(@"hideStreakBadges")) return;
-    [self tm_updateStreakModel:model];
+    ((void (*)(id, SEL, id))g_orig_StreakView)(self, _cmd, model);
 }
 
-@end
-
-@interface _TtC17TikTokIMImplSwift24AWEIMExtensionStreakInfo (TikTokModV1)
-- (BOOL)tm_disableStreak;
-@end
-
-@implementation _TtC17TikTokIMImplSwift24AWEIMExtensionStreakInfo (TikTokModV1)
-
-- (BOOL)tm_disableStreak {
+static BOOL TMHook_StreakSwitch(id self, SEL _cmd) {
     if (TMOn(@"hideStreakBadges")) return YES;
-    return [self tm_disableStreak];
+    return ((BOOL (*)(id, SEL))g_orig_StreakSwitch)(self, _cmd);
 }
-
-@end
 
 // --- Series paid tag (#43, HIDE ONLY) ---
-@interface AWEFeedPaidContentPreviewTagView (TikTokModV1)
-- (void)tm__setupUI;
-@end
-
-@implementation AWEFeedPaidContentPreviewTagView (TikTokModV1)
-
-- (void)tm__setupUI {
-    [self tm__setupUI];
-    if (TMOn(@"hideSeriesRows")) self.hidden = YES;
+static void TMHook_SeriesTagSetup(id self, SEL _cmd) {
+    ((void (*)(id, SEL))g_orig_SeriesTagSetup)(self, _cmd);
+    if (TMOn(@"hideSeriesRows")) ((UIView *)self).hidden = YES;
 }
 
-@end
-
 // --- Startup screen (#40): AppDelegate launch hook, fallback is feed-root ---
-@interface AppDelegate (TikTokModV1)
-- (BOOL)tm_application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions;
-@end
-
-@implementation AppDelegate (TikTokModV1)
-
-- (BOOL)tm_application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    BOOL result = [self tm_application:application didFinishLaunchingWithOptions:launchOptions];
+static BOOL TMHook_AppDidFinishLaunching(id self, SEL _cmd, UIApplication *app, NSDictionary *opts) {
+    BOOL result = ((BOOL (*)(id, SEL, id, id))g_orig_AppDidFinishLaunching)(self, _cmd, app, opts);
     if (TMOn(@"startupScreen")) [TikTokModV1 presentStartupScreen];
     return result;
 }
 
-@end
 
 // ---------------------------------------------------------------------------
 // Installer
 // ---------------------------------------------------------------------------
 
-/// Install one site if its class + original + swizzled methods exist AND the
-/// original's return type matches (BOOL sites accept 'B' or 'c'). Fail-soft.
-static BOOL TMInstallSite(NSString *className, SEL orig, SEL swz,
+/// Install one runtime hook site: resolve the class, check the original
+/// method exists and its return type matches (BOOL sites accept 'B' or 'c'),
+/// then add our IMP under an alias selector and exchange implementations.
+/// Fail-soft everywhere; returns NO (with NSLog) on any miss.
+static BOOL TMInstallSite(NSString *className, SEL origSel, IMP newImp, IMP *outOrig,
                           BOOL classMethod, const char *retPrefix) {
     Class cls = [TikTokMod safeClass:className];
     if (!cls) return NO;
-    Method m = classMethod ? class_getClassMethod(cls, orig)
-                           : class_getInstanceMethod(cls, orig);
+    Class target = classMethod ? object_getClass(cls) : cls;
+    Method m = classMethod ? class_getClassMethod(cls, origSel)
+                           : class_getInstanceMethod(cls, origSel);
     if (!m) {
         NSLog(@"[TikTokMod] V1 site %@ %@ not found, skipping (fail-soft)",
-              className, NSStringFromSelector(orig));
+              className, NSStringFromSelector(origSel));
         return NO;
     }
     if (retPrefix) {
@@ -1325,21 +1194,22 @@ static BOOL TMInstallSite(NSString *className, SEL orig, SEL swz,
                   (retPrefix[0] == 'c' && got == 'B');
         if (!ok) {
             NSLog(@"[TikTokMod] V1 site %@ %@: unexpected return type '%c', skipping (fail-soft)",
-                  className, NSStringFromSelector(orig), got);
+                  className, NSStringFromSelector(origSel), got);
             return NO;
         }
     }
-    Method s = classMethod ? class_getClassMethod(cls, swz)
-                           : class_getInstanceMethod(cls, swz);
-    if (!s) {
-        NSLog(@"[TikTokMod] V1 site %@ %@: swizzled method %@ missing in dylib, skipping",
-              className, NSStringFromSelector(orig), NSStringFromSelector(swz));
+    NSString *aliasName = [@"tm_orig_" stringByAppendingString:NSStringFromSelector(origSel)];
+    SEL aliasSel = NSSelectorFromString(aliasName);
+    if (!class_addMethod(target, aliasSel, newImp, method_getTypeEncoding(m))) {
+        NSLog(@"[TikTokMod] V1 site %@ %@: alias %@ already exists, skipping",
+              className, NSStringFromSelector(origSel), aliasName);
         return NO;
     }
-    if (classMethod) {
-        return [TikTokMod safeSwizzleClassMethod:cls originalSelector:orig swizzledSelector:swz];
-    }
-    return [TikTokMod safeSwizzleClass:cls originalSelector:orig swizzledSelector:swz];
+    *outOrig = method_getImplementation(m);
+    Method aliasMethod = class_getInstanceMethod(target, aliasSel);
+    method_exchangeImplementations(m, aliasMethod);
+    NSLog(@"[TikTokMod] V1 hook installed: %@ %@", className, NSStringFromSelector(origSel));
+    return YES;
 }
 
 static BOOL g_v1InstalledContainer = NO;
@@ -1365,113 +1235,116 @@ static BOOL g_v1InstalledStreakSwitch = NO;
 static BOOL g_v1InstalledSeriesTag = NO;
 static BOOL g_v1InstalledAppDelegate = NO;
 
-@implementation TikTokModV1
-
-+ (nullable id)activePlayer { return g_activePlayer; }
-
-+ (void)installV1Hooks {
-    // Generic dispatcher FIRST — it is also the retry trigger (§2.1).
-    [TikTokMod safeSwizzleClass:[TikTokMod safeClass:@"UIViewController"]
-               originalSelector:@selector(viewDidLoad)
-               swizzledSelector:@selector(tm_viewDidLoad)];
-    [self retryDeferredInstalls];
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(tm_settingsChanged:)
-                                                 name:TikTokModSettingsDidChangeNotification
-                                               object:nil];
-    NSLog(@"[TikTokMod] V1 installHooks: dispatcher installed; per-site results in the logs above");
-}
-
 + (void)retryDeferredInstalls {
     if (!g_v1InstalledContainer) {
         g_v1InstalledContainer = TMInstallSite(@"AWEFeedContainerViewController",
-            @selector(viewDidLoad), @selector(tm_viewDidLoad), NO, "v");
+            @selector(viewDidLoad), (IMP)TMHook_Container_viewDidLoad,
+            &g_orig_Container_viewDidLoad, NO, "v");
     }
     if (!g_v1InstalledRoot) {
         g_v1InstalledRoot = TMInstallSite(@"AWEFeedRootViewController",
-            @selector(viewDidLoad), @selector(tm_viewDidLoad), NO, "v");
+            @selector(viewDidLoad), (IMP)TMHook_Root_viewDidLoad,
+            &g_orig_Root_viewDidLoad, NO, "v");
     }
     if (!g_v1InstalledRootBar) {
         g_v1InstalledRootBar = TMInstallSite(@"AWEFeedRootViewController",
-            @selector(prefersStatusBarHidden), @selector(tm_prefersStatusBarHidden), NO, "B");
+            @selector(prefersStatusBarHidden), (IMP)TMHook_Root_prefersStatusBarHidden,
+            &g_orig_Root_prefersStatusBarHidden, NO, "B");
     }
     if (!g_v1InstalledCell) {
         g_v1InstalledCell = TMInstallSite(@"AWEFeedViewCell",
-            @selector(setupViewController), @selector(tm_setupViewController), NO, "v");
+            @selector(setupViewController), (IMP)TMHook_Cell_setupViewController,
+            &g_orig_Cell_setupViewController, NO, "v");
     }
     if (!g_v1InstalledPlayerRate) {
         g_v1InstalledPlayerRate = TMInstallSite(@"AWEVideoPlayerController",
-            @selector(setPlaybackRate:), @selector(tm_setPlaybackRate:), NO, "v");
+            @selector(setPlaybackRate:), (IMP)TMHook_Player_setPlaybackRate,
+            &g_orig_Player_setPlaybackRate, NO, "v");
     }
     if (!g_v1InstalledPlayerCurrentRate) {
         g_v1InstalledPlayerCurrentRate = TMInstallSite(@"AWEVideoPlayerController",
-            @selector(setCurrentPlaybackRate:), @selector(tm_setCurrentPlaybackRate:), NO, "v");
+            @selector(setCurrentPlaybackRate:), (IMP)TMHook_Player_setCurrentPlaybackRate,
+            &g_orig_Player_setCurrentPlaybackRate, NO, "v");
     }
     if (!g_v1InstalledPlayerSeek) {
         g_v1InstalledPlayerSeek = TMInstallSite(@"AWEVideoPlayerController",
             NSSelectorFromString(@"_seekToTime:shouldPlay:"),
-            @selector(tm_seekToTime:shouldPlay:), NO, "v");
+            (IMP)TMHook_Player_seekToTime, &g_orig_Player_seekToTime, NO, "v");
     }
     if (!g_v1InstalledEngineSpeed) {
         g_v1InstalledEngineSpeed = TMInstallSite(@"TTVideoEngine",
-            @selector(setPlaybackSpeed:), @selector(tm_setPlaybackSpeed:), NO, "v");
+            @selector(setPlaybackSpeed:), (IMP)TMHook_Engine_setPlaybackSpeed,
+            &g_orig_Engine_setPlaybackSpeed, NO, "v");
     }
     if (!g_v1InstalledPiP1) {
         g_v1InstalledPiP1 = TMInstallSite(@"TTKMediaPiPController",
-            @selector(isPictureInPictureSupported), @selector(tm_isPictureInPictureSupported), NO, "B");
+            @selector(isPictureInPictureSupported), (IMP)TMHook_PiP1_supported,
+            &g_orig_PiP1_supported, NO, "B");
     }
     if (!g_v1InstalledPiP2) {
         g_v1InstalledPiP2 = TMInstallSite(@"TTPictureInPictureController",
-            @selector(isPictureInPictureSupported), @selector(tm_isPictureInPictureSupported), NO, "B");
+            @selector(isPictureInPictureSupported), (IMP)TMHook_PiP2_supported,
+            &g_orig_PiP2_supported, NO, "B");
     }
     if (!g_v1InstalledPiPGate) {
         g_v1InstalledPiPGate = TMInstallSite(@"TTKFeedAppDiffComponent",
-            @selector(feedPictureInPictureEntrance), @selector(tm_feedPictureInPictureEntrance), NO, "B");
+            @selector(feedPictureInPictureEntrance), (IMP)TMHook_PiPGate,
+            &g_orig_PiPGate, NO, "B");
     }
     if (!g_v1InstalledReadAll) {
         g_v1InstalledReadAll = TMInstallSite(@"AWEIMModuleService",
-            @selector(inboxReadAllEnable), @selector(tm_inboxReadAllEnable), YES, "B");
+            @selector(inboxReadAllEnable), (IMP)TMHook_ReadAllEnable,
+            &g_orig_ReadAllEnable, YES, "B");
     }
     if (!g_v1InstalledStoryMount) {
         g_v1InstalledStoryMount = TMInstallSite(@"TTKStory2FeedOverlayViewComponent",
-            @selector(componentMount), @selector(tm_componentMount), NO, "v");
+            @selector(componentMount), (IMP)TMHook_StoryMount,
+            &g_orig_StoryMount, NO, "v");
     }
     if (!g_v1InstalledStoryBar) {
         g_v1InstalledStoryBar = TMInstallSite(@"AWEAwemeModel",
-            @selector(hideStoryBottomBar), @selector(tm_hideStoryBottomBar), NO, "B");
+            @selector(hideStoryBottomBar), (IMP)TMHook_StoryBar,
+            &g_orig_StoryBar, NO, "B");
     }
     if (!g_v1InstalledDataSource) {
         g_v1InstalledDataSource = TMInstallSite(@"AWEListDataController",
-            @selector(filteredDataSource), @selector(tm_filteredDataSource), NO, "@");
+            @selector(filteredDataSource), (IMP)TMHook_DataSource_filteredDataSource,
+            &g_orig_DataSource, NO, "@");
     }
     if (!g_v1InstalledBanner) {
         g_v1InstalledBanner = TMInstallSite(@"TTKStandardProfileBannerContainer",
-            @selector(layoutSubviews), @selector(tm_layoutSubviews), NO, "v");
+            @selector(layoutSubviews), (IMP)TMHook_BannerLayout,
+            &g_orig_BannerLayout, NO, "v");
     }
     if (!g_v1InstalledPhotoButton) {
         g_v1InstalledPhotoButton = TMInstallSite(@"TTKPhotoModeCommentEntranceView",
-            @selector(setShouldShowPhotoButton:), @selector(tm_setShouldShowPhotoButton:), NO, "v");
+            @selector(setShouldShowPhotoButton:), (IMP)TMHook_PhotoButton,
+            &g_orig_PhotoButton, NO, "v");
     }
     if (!g_v1InstalledLiveBadge) {
         g_v1InstalledLiveBadge = TMInstallSite(@"AWEFeedContainerViewController",
-            @selector(shouldShowLiveBadge), @selector(tm_shouldShowLiveBadge), NO, "B");
+            @selector(shouldShowLiveBadge), (IMP)TMHook_LiveBadge,
+            &g_orig_LiveBadge, NO, "B");
     }
     if (!g_v1InstalledStreakView) {
         g_v1InstalledStreakView = TMInstallSite(@"AWEManagedStreakView",
-            @selector(updateStreakModel:), @selector(tm_updateStreakModel:), NO, "v");
+            @selector(updateStreakModel:), (IMP)TMHook_StreakView,
+            &g_orig_StreakView, NO, "v");
     }
     if (!g_v1InstalledStreakSwitch) {
         g_v1InstalledStreakSwitch = TMInstallSite(@"_TtC17TikTokIMImplSwift24AWEIMExtensionStreakInfo",
-            @selector(disableStreak), @selector(tm_disableStreak), NO, "B");
+            @selector(disableStreak), (IMP)TMHook_StreakSwitch,
+            &g_orig_StreakSwitch, NO, "B");
     }
     if (!g_v1InstalledSeriesTag) {
         g_v1InstalledSeriesTag = TMInstallSite(@"AWEFeedPaidContentPreviewTagView",
-            NSSelectorFromString(@"_setupUI"), @selector(tm__setupUI), NO, "v");
+            NSSelectorFromString(@"_setupUI"), (IMP)TMHook_SeriesTagSetup,
+            &g_orig_SeriesTagSetup, NO, "v");
     }
     if (!g_v1InstalledAppDelegate) {
         g_v1InstalledAppDelegate = TMInstallSite(@"AppDelegate",
             @selector(application:didFinishLaunchingWithOptions:),
-            @selector(tm_application:didFinishLaunchingWithOptions:), NO, "B");
+            (IMP)TMHook_AppDidFinishLaunching, &g_orig_AppDidFinishLaunching, NO, "B");
     }
 }
 
