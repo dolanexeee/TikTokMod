@@ -463,7 +463,219 @@ static void TM3InstallPinningBypass(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Feature bodies — filled in per feature commit (B: #10, C: #18, D: #24,
+// #10 Download quality — capture + picker + skip-quality
+// No stock picker exists (both passes). The variants are the playAddr keys
+// from INJECTION-ANALYSIS.md (playAddr, playAddr265, playAddrH264,
+// playAddrLowbr, playAddrBytevc1, playAddr3DFallback, downloadUrl).
+// Capture points:
+//   • AWEMediaDownloadAwemeStage downloadVideoWithURLList: — every stock
+//     download passes its URL list here; the hook records the list (the
+//     picker fallback) and, when a quality choice is stored, hands the stock
+//     stage ONLY the matching URL ("skip quality").
+//   • The current aweme model (via V1's +activePlayer) — KVC reads of the
+//     playAddr variants; the picker offers those URLs directly.
+// Matching a stored variant key to a URL is HEURISTIC and UNVERIFIED:
+// exact model-URL match first, then a URL-substring match for the variant
+// marker (265 / h264 / lowbr / bytevc1). If neither matches, the stock list
+// is passed through untouched and the reason is logged. Nothing here claims
+// a variant maps to a distinct quality until a runtime capture proves it.
+// #44's download_no_watermark_addr is deliberately NOT read here (DEFER).
+// ---------------------------------------------------------------------------
+
+static IMP g3_orig_DownloadStage_downloadVideo = NULL;
+static IMP g3_orig_DownloadComponent_didFinish = NULL;
+static BOOL g3_installed_DownloadStage = NO;
+static BOOL g3_installed_DownloadComponent = NO;
+
+static NSArray<NSString *> *TM3VariantKeys(void) {
+    return @[@"playAddr", @"playAddr265", @"playAddrH264", @"playAddrLowbr",
+             @"playAddrBytevc1", @"playAddr3DFallback", @"downloadUrl", @"downloadAddr"];
+}
+
+/// Best-effort URL string from a model value: NSString (http…), NSArray of
+/// strings, or a model/dict with a urlList/url_list/url key. nil otherwise.
+static NSString * _Nullable TM3URLStringFromValue(id value) {
+    if ([value isKindOfClass:[NSString class]]) {
+        NSString *s = (NSString *)value;
+        if ([s hasPrefix:@"http://"] || [s hasPrefix:@"https://"]) return s;
+        return nil;
+    }
+    if ([value isKindOfClass:[NSArray class]]) {
+        for (id el in (NSArray *)value) {
+            NSString *s = TM3URLStringFromValue(el);
+            if (s) return s;
+        }
+        return nil;
+    }
+    if ([value isKindOfClass:[NSDictionary class]]) {
+        for (NSString *key in @[@"url_list", @"urlList", @"url", @"playUrl", @"play_url"]) {
+            NSString *s = TM3URLStringFromValue([(NSDictionary *)value objectForKey:key]);
+            if (s) return s;
+        }
+        return nil;
+    }
+    if (value) {
+        for (NSString *key in @[@"urlList", @"url_list", @"url", @"playUrl", @"play_url"]) {
+            NSString *s = TM3URLStringFromValue(TM3Value(value, key));
+            if (s) return s;
+        }
+    }
+    return nil;
+}
+
+/// The current video's aweme model, reached from V1's active player via KVC.
+/// The player→aweme key is not in the evidence files, so several likely keys
+/// are tried; a miss is nil (fail-soft), never a guess.
+static id _Nullable TM3CurrentAwemeModel(void) {
+    id player = [TikTokModV1 activePlayer];
+    if (!player) return nil;
+    for (NSString *key in @[@"aweme", @"awemeModel", @"currentAweme", @"model", @"currentModel"]) {
+        id model = TM3Value(player, key);
+        if (model) return model;
+    }
+    // The player itself may expose the video container directly.
+    if (TM3Value(player, @"video")) return player;
+    return nil;
+}
+
+/// Variant key → URL string for the current video (model read only).
+static NSDictionary<NSString *, NSString *> *TM3QualityURLsFromAweme(id aweme) {
+    if (!aweme) return @{};
+    id video = TM3Value(aweme, @"video") ?: aweme;
+    NSMutableDictionary<NSString *, NSString *> *out = [NSMutableDictionary dictionary];
+    for (NSString *key in TM3VariantKeys()) {
+        NSString *url = TM3URLStringFromValue(TM3Value(video, key));
+        if (!url) url = TM3URLStringFromValue(TM3Value(aweme, key));
+        if (url) out[key] = url;
+    }
+    return [out copy];
+}
+
+/// URL substring markers for the variant keys (heuristic — see the header).
+/// playAddr3DFallback has no safe substring ("3d" matches too broadly).
+static NSString * _Nullable TM3MarkerForVariant(NSString *variant) {
+    if ([variant isEqualToString:@"playAddr265"]) return @"265";
+    if ([variant isEqualToString:@"playAddrH264"]) return @"h264";
+    if ([variant isEqualToString:@"playAddrLowbr"]) return @"lowbr";
+    if ([variant isEqualToString:@"playAddrBytevc1"]) return @"bytevc1";
+    return nil;
+}
+
+static NSString * _Nullable TM3StringOfURLValue(id value) {
+    if ([value isKindOfClass:[NSString class]]) return (NSString *)value;
+    if ([value isKindOfClass:[NSURL class]]) return [(NSURL *)value absoluteString];
+    return nil;
+}
+
+/// A download-stage instance: shared factory if one resolves, else alloc/init.
+static id _Nullable TM3DownloadStageInstance(void) {
+    Class cls = NSClassFromString(@"AWEMediaDownloadAwemeStage");
+    if (!cls) {
+        NSLog(@"[TikTokMod] #10 AWEMediaDownloadAwemeStage not found (fail-soft)");
+        return nil;
+    }
+    for (NSString *factory in @[@"sharedInstance", @"shareInstance", @"sharedManager",
+                                @"sharedStage", @"defaultStage"]) {
+        SEL f = NSSelectorFromString(factory);
+        if ([cls respondsToSelector:f]) {
+            id stage = ((id (*)(id, SEL))objc_msgSend)(cls, f);
+            if (stage) return stage;
+        }
+    }
+    return [[cls alloc] init];
+}
+
+/// Hand one URL string to the stock download stage, matching the element type
+/// stock itself used (NSString vs NSURL, from the last captured list).
+static BOOL TM3HandURLToStage(NSString *urlString) {
+    id stage = TM3DownloadStageInstance();
+    if (!stage) return NO;
+    SEL dl = NSSelectorFromString(@"downloadVideoWithURLList:");
+    if (![stage respondsToSelector:dl]) {
+        NSLog(@"[TikTokMod] #10 stage does not respond to downloadVideoWithURLList: (fail-soft)");
+        return NO;
+    }
+    id element = urlString;
+    id firstCaptured = [g3_lastCapturedURLs firstObject];
+    if ([firstCaptured isKindOfClass:[NSURL class]]) {
+        element = [NSURL URLWithString:urlString] ?: urlString;
+    }
+    @try {
+        ((void (*)(id, SEL, id))objc_msgSend)(stage, dl, @[element]);
+        NSLog(@"[TikTokMod] #10 handed URL to AWEMediaDownloadAwemeStage downloadVideoWithURLList: "
+              @"(UNVERIFIED-RUNTIME — stock save path, verify on device)");
+        return YES;
+    } @catch (__unused NSException *e) {
+        NSLog(@"[TikTokMod] #10 handing URL to the stage threw (fail-soft)");
+        return NO;
+    }
+}
+
+static void TM3Hook_DownloadStage_downloadVideo(id self, SEL _cmd, id urlList) {
+    if ([urlList isKindOfClass:[NSArray class]] && [(NSArray *)urlList count] > 0) {
+        g3_lastCapturedURLs = [(NSArray *)urlList copy];
+        NSLog(@"[TikTokMod] #10 captured stock download URL list (%lu URL(s))",
+              (unsigned long)[(NSArray *)urlList count]);
+    }
+    if (TM3On(@"downloadQualitySelection")) {
+        NSString *choice = [TM3Settings() downloadQualityChoice];
+        if (choice && ![choice isEqualToString:@"auto"] && [urlList isKindOfClass:[NSArray class]]) {
+            // 1) Exact model-URL match for the stored variant.
+            NSDictionary *variants = TM3QualityURLsFromAweme(TM3CurrentAwemeModel());
+            NSString *wanted = variants[choice];
+            id match = nil;
+            if (wanted) {
+                for (id el in (NSArray *)urlList) {
+                    if ([wanted isEqualToString:TM3StringOfURLValue(el)]) { match = el; break; }
+                }
+            }
+            // 2) Heuristic substring match on the variant marker.
+            if (!match) {
+                NSString *marker = TM3MarkerForVariant(choice);
+                if (marker) {
+                    for (id el in (NSArray *)urlList) {
+                        NSString *s = TM3StringOfURLValue(el);
+                        if (s && [s containsString:marker]) { match = el; break; }
+                    }
+                }
+            }
+            if (match) {
+                NSLog(@"[TikTokMod] #10 skip-quality: stored choice %@ matched a URL — "
+                      @"downloading only that variant (UNVERIFIED-RUNTIME)", choice);
+                ((void (*)(id, SEL, id))g3_orig_DownloadStage_downloadVideo)(self, _cmd, @[match]);
+                return;
+            }
+            NSLog(@"[TikTokMod] #10 skip-quality: stored choice %@ matched no URL in the stock list "
+                  @"(heuristic match failed) — passing the stock list through untouched", choice);
+        }
+    }
+    ((void (*)(id, SEL, id))g3_orig_DownloadStage_downloadVideo)(self, _cmd, urlList);
+}
+
+static void TM3Hook_DownloadComponent_didFinish(id self, SEL _cmd, id service, id player, id url) {
+    if (TM3On(@"downloadQualitySelection") || TM3On(@"audioOnlyDownload")) {
+        NSString *urlString = TM3StringOfURLValue(url) ?: @"<unknown>";
+        if (urlString.length > 120) urlString = [[urlString substringToIndex:120] stringByAppendingString:@"…"];
+        NSLog(@"[TikTokMod] download finished callback: URL=%@ (stock save path)", urlString);
+    }
+    ((void (*)(id, SEL, id, id, id))g3_orig_DownloadComponent_didFinish)(self, _cmd, service, player, url);
+}
+
+static void TM3InstallDownloadCapture(void) {
+    if (!g3_installed_DownloadStage) {
+        g3_installed_DownloadStage = TM3InstallSite(@"AWEMediaDownloadAwemeStage",
+            NSSelectorFromString(@"downloadVideoWithURLList:"),
+            (IMP)TM3Hook_DownloadStage_downloadVideo, &g3_orig_DownloadStage_downloadVideo, NO, 'v');
+    }
+    if (!g3_installed_DownloadComponent) {
+        g3_installed_DownloadComponent = TM3InstallSite(@"TTKMediaVideoDownloadComponent",
+            NSSelectorFromString(@"playerDelegateService:player:didFinishVideoDataDownloadForURL:"),
+            (IMP)TM3Hook_DownloadComponent_didFinish, &g3_orig_DownloadComponent_didFinish, NO, 'v');
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Feature bodies — filled in per feature commit (C: #18, D: #24,
 // E: #25, F: #27). Until then each is a safe no-op that says so.
 // ---------------------------------------------------------------------------
 
@@ -495,6 +707,7 @@ static NSString *g3_lastWebSourceURL = nil;
     // Re-attempt the bypass surfaces (classes load lazily) and the per-feature
     // sites (added in commits B–F). Idempotent: installed sites are skipped.
     TM3InstallPinningBypass();
+    TM3InstallDownloadCapture();
 }
 
 + (NSString *)pinningBypassStatus {
@@ -521,8 +734,7 @@ static NSString *g3_lastWebSourceURL = nil;
 }
 
 + (NSDictionary<NSString *, NSString *> *)currentVideoQualityURLs {
-    // Filled in commit B (#10).
-    return @{};
+    return TM3QualityURLsFromAweme(TM3CurrentAwemeModel());
 }
 
 + (NSArray *)lastCapturedDownloadURLs {
@@ -530,9 +742,65 @@ static NSString *g3_lastWebSourceURL = nil;
 }
 
 + (void)downloadCurrentVideoFromViewController:(UIViewController *)vc {
-    // Filled in commit B (#10).
-    TM3AlertFrom(vc, @"Download quality (#10)",
-        @"Not implemented yet in this build — the HARD quality picker lands in the next commit.");
+    if (!TM3On(@"downloadQualitySelection")) {
+        TM3AlertFrom(vc, @"Download quality (#10)",
+            @"Turn the toggle on first. The download is UNVERIFIED-RUNTIME — it needs a runtime traffic capture proving the pinning bypass.");
+        return;
+    }
+    NSDictionary<NSString *, NSString *> *variants = [self currentVideoQualityURLs];
+    NSString *choice = [TM3Settings() downloadQualityChoice];
+    // "Skip quality": a stored variant downloads silently, no picker.
+    if (choice && ![choice isEqualToString:@"auto"]) {
+        NSString *url = variants[choice];
+        if (url && TM3HandURLToStage(url)) return;
+        // Stored variant not found on this video — fall through to the picker.
+        NSLog(@"[TikTokMod] #10 stored choice %@ has no URL on this video — showing the picker instead", choice);
+    }
+    NSMutableArray<NSString *> *labels = [NSMutableArray array];
+    NSMutableArray<NSString *> *urls = [NSMutableArray array];
+    for (NSString *key in TM3VariantKeys()) {
+        NSString *url = variants[key];
+        if (url) { [labels addObject:key]; [urls addObject:url]; }
+    }
+    for (id captured in g3_lastCapturedURLs ?: @[]) {
+        NSString *s = TM3StringOfURLValue(captured);
+        if (s && ![urls containsObject:s]) {
+            [labels addObject:[NSString stringWithFormat:@"Captured URL %lu", (unsigned long)labels.count + 1]];
+            [urls addObject:s];
+        }
+    }
+    if (labels.count == 0) {
+        TM3AlertFrom(vc, @"Download quality (#10)",
+            @"No video URL could be found for the current video (no aweme model reachable and no stock download captured yet). Open the video, use TikTok's Share → Save once so a URL is captured, then try again. UNVERIFIED-RUNTIME.");
+        return;
+    }
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Download quality (#10)"
+        message:@"Pick a playAddr variant. Your pick is remembered as the skip-quality choice (tap “Ask every time” to clear it). No stock picker exists — this list is built from the current video's model + captured stock URLs. UNVERIFIED-RUNTIME."
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    for (NSUInteger i = 0; i < labels.count; i++) {
+        NSString *label = labels[i];
+        NSString *url = urls[i];
+        [sheet addAction:[UIAlertAction actionWithTitle:label style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+            // Remember the variant key when the pick came from the model;
+            // captured-URL picks are one-off (no variant key to remember).
+            NSString *variantKey = nil;
+            for (NSString *key in TM3VariantKeys()) {
+                if ([variants[key] isEqualToString:url]) { variantKey = key; break; }
+            }
+            if (variantKey) [TM3Settings() setDownloadQualityChoice:variantKey];
+            if (!TM3HandURLToStage(url)) {
+                TM3AlertFrom(vc, @"Download quality (#10)",
+                    @"Could not reach the stock download stage on this version (fail-soft). The stock Share → Save flow is untouched.");
+            }
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Ask every time (clear remembered quality)"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction *a) {
+        [TM3Settings() setDownloadQualityChoice:@"auto"];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [vc presentViewController:sheet animated:YES completion:nil];
 }
 
 + (void)downloadFromWebSourceFromViewController:(UIViewController *)vc {
