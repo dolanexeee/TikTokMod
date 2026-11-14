@@ -767,7 +767,255 @@ static NSString *TM3FileNameForURLString(NSString *urlString, NSString *defaultE
 }
 
 // ---------------------------------------------------------------------------
-// Feature bodies — filled in per feature commit (D: #24, E: #25, F: #27).
+// #24 Region switching — PARTIAL BY DESIGN
+// The feed region is largely server-side (IP, SIM, account). What the dylib
+// can do is change what the CLIENT reports:
+//   (a) NSLocale — +currentLocale / +autoupdatingCurrentLocale return a
+//       locale built from the chosen country code, and -objectForKey:
+//       answers NSLocaleCountryCode with the chosen code (system-class
+//       swizzles, same pattern V2 uses for UIFont).
+//   (b) CTCarrier — isoCountryCode / mobileCountryCode return the chosen
+//       code (runtime IMP install; the class may be absent → fail-soft).
+//   (c) Region manager — PNSChangeRegionSettingsModel isChangeRegionEnabled
+//       forced YES, then +setSignupRegionWithType:regionModel: is called
+//       with a country model whose countryCode was KVC-set to the chosen
+//       code (built via +getCountryModelWithScene:usageType: when it
+//       resolves, else alloc/init), followed by +ackChangeRegionComplete.
+//       The call goes through NSInvocation with a neutral first argument
+//       (nil object / 0 integer, per the method's own type encoding), so an
+//       unknown "type" parameter can never crash the call.
+//   (d) Feed refresh — refreshWithCompletion: on the feed data controller
+//       when one is reachable (empty block), else the user pulls to refresh.
+// The sys_region request parameter itself has no verified builder class to
+// hook — it is covered only insofar as TikTok reads it from the locale /
+// carrier paths above. NEVER promise a region change: the server decides.
+// Switching back (clear the code / turn the toggle off) restores stock
+// reporting, because every spoof above checks the live toggle per call.
+// ---------------------------------------------------------------------------
+
+static IMP g3_orig_CTCarrier_iso = NULL;
+static IMP g3_orig_CTCarrier_mcc = NULL;
+static IMP g3_orig_RegionSettings_enabled = NULL;
+static BOOL g3_installed_CTCarrier_iso = NO;
+static BOOL g3_installed_CTCarrier_mcc = NO;
+static BOOL g3_installed_RegionSettings = NO;
+static BOOL g3_localeSpoofInstalled = NO;
+
+static NSString * _Nullable TM3RegionCodeIfOn(void) {
+    if (!TM3On(@"regionSwitching")) return nil;
+    NSString *code = [[TM3Settings() regionCode] uppercaseString];
+    return code.length > 0 ? code : nil;
+}
+
+// NSLocale spoof (system class category — same pattern as V2's UIFont).
+@interface NSLocale (TikTokModHard)
++ (NSLocale *)tm3_currentLocale;
++ (NSLocale *)tm3_autoupdatingCurrentLocale;
+- (nullable id)tm3_objectForKey:(id)key;
+@end
+
+@implementation NSLocale (TikTokModHard)
+
++ (NSLocale *)tm3_currentLocale {
+    // After the exchange this selector holds the ORIGINAL implementation.
+    NSLocale *orig = [self tm3_currentLocale];
+    NSString *code = TM3RegionCodeIfOn();
+    if (!code) return orig;
+    NSString *lang = [orig languageCode] ?: @"en";
+    NSLocale *spoofed = [NSLocale localeWithLocaleIdentifier:
+        [NSString stringWithFormat:@"%@_%@", lang, code]];
+    if (spoofed) {
+        NSLog(@"[TikTokMod] #24 NSLocale currentLocale spoofed to %@ (PARTIAL — server decides the feed)", code);
+    }
+    return spoofed ?: orig;
+}
+
++ (NSLocale *)tm3_autoupdatingCurrentLocale {
+    NSLocale *orig = [self tm3_autoupdatingCurrentLocale];
+    NSString *code = TM3RegionCodeIfOn();
+    if (!code) return orig;
+    NSString *lang = [orig languageCode] ?: @"en";
+    NSLocale *spoofed = [NSLocale localeWithLocaleIdentifier:
+        [NSString stringWithFormat:@"%@_%@", lang, code]];
+    return spoofed ?: orig;
+}
+
+- (nullable id)tm3_objectForKey:(id)key {
+    if ([key isEqual:NSLocaleCountryCode]) {
+        NSString *code = TM3RegionCodeIfOn();
+        if (code) return code;
+    }
+    return [self tm3_objectForKey:key];
+}
+
+@end
+
+static NSString *TM3Hook_CTCarrier_iso(id self, SEL _cmd) {
+    NSString *code = TM3RegionCodeIfOn();
+    if (code) return code;
+    return ((id (*)(id, SEL))g3_orig_CTCarrier_iso)(self, _cmd);
+}
+
+static NSString *TM3Hook_CTCarrier_mcc(id self, SEL _cmd) {
+    NSString *code = TM3RegionCodeIfOn();
+    if (code) return code;
+    return ((id (*)(id, SEL))g3_orig_CTCarrier_mcc)(self, _cmd);
+}
+
+static BOOL TM3Hook_RegionSettings_enabled(id self, SEL _cmd) {
+    if (TM3On(@"regionSwitching")) return YES;
+    return ((BOOL (*)(id, SEL))g3_orig_RegionSettings_enabled)(self, _cmd);
+}
+
+/// Call a class method through NSInvocation with a neutral first argument
+/// (nil for an object parameter, 0 for an integer, NO for a BOOL), derived
+/// from the method's own type encoding. Returns the object result or nil.
+/// Used for +getCountryModelWithScene:usageType:, whose parameter types are
+/// not in the evidence files.
+static id _Nullable TM3InvokeClassMethodNeutral(Class cls, SEL sel, id secondArg) {
+    if (!cls || !sel) return nil;
+    NSMethodSignature *sig = [cls methodSignatureForSelector:sel];
+    if (!sig || sig.numberOfArguments < 3) return nil;
+    NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+    [inv setTarget:cls];
+    [inv setSelector:sel];
+    const char *argType = [sig getArgumentTypeAtIndex:2];
+    if (argType[0] == '@') {
+        id nilObj = nil;
+        [inv setArgument:&nilObj atIndex:2];
+    } else if (argType[0] == 'B' || argType[0] == 'c') {
+        BOOL no = NO;
+        [inv setArgument:&no atIndex:2];
+    } else {
+        long long zero = 0;
+        [inv setArgument:&zero atIndex:2];
+    }
+    if (secondArg && sig.numberOfArguments >= 4) {
+        const char *argType2 = [sig getArgumentTypeAtIndex:3];
+        if (argType2[0] == '@') {
+            id obj = secondArg;
+            [inv setArgument:&obj atIndex:3];
+        }
+    }
+    @try {
+        [inv invoke];
+    } @catch (__unused NSException *e) {
+        NSLog(@"[TikTokMod] #24 NSInvocation of %@ failed (fail-soft)", NSStringFromSelector(sel));
+        return nil;
+    }
+    const char *retType = sig.methodReturnType;
+    if (retType[0] == '@') {
+        __unsafe_unretained id result = nil;
+        [inv getReturnValue:&result];
+        return result;
+    }
+    return nil;
+}
+
+static void TM3ApplyRegionManager(NSString *code) {
+    Class mgrCls = NSClassFromString(@"PNSChangeRegionManager");
+    if (!mgrCls) {
+        NSLog(@"[TikTokMod] #24 PNSChangeRegionManager not found — locale/carrier spoof only (PARTIAL)");
+        return;
+    }
+    // Build a country model: prefer a real stock model, else alloc/init.
+    id model = nil;
+    SEL getModel = NSSelectorFromString(@"getCountryModelWithScene:usageType:");
+    if ([mgrCls respondsToSelector:getModel]) {
+        model = TM3InvokeClassMethodNeutral(mgrCls, getModel, nil);
+    }
+    if (!model) {
+        Class modelCls = NSClassFromString(@"PNSChangeRegionCountryModel");
+        if (!modelCls) modelCls = NSClassFromString(@"PNSChangeRegionCountryModelV2");
+        if (modelCls) model = [[modelCls alloc] init];
+    }
+    if (!model) {
+        NSLog(@"[TikTokMod] #24 no country model could be built — locale/carrier spoof only (PARTIAL)");
+        return;
+    }
+    BOOL set = TM3TrySet(model, @"countryCode", code) || TM3TrySet(model, @"regionCode", code);
+    if (!set) {
+        NSLog(@"[TikTokMod] #24 countryCode could not be set on %@ — locale/carrier spoof only (PARTIAL)",
+              NSStringFromClass([model class]));
+        return;
+    }
+    SEL setRegion = NSSelectorFromString(@"setSignupRegionWithType:regionModel:");
+    if ([mgrCls respondsToSelector:setRegion]) {
+        TM3InvokeClassMethodNeutral(mgrCls, setRegion, model);
+        NSLog(@"[TikTokMod] #24 setSignupRegionWithType:regionModel: called with countryCode %@ (PARTIAL)", code);
+    } else {
+        NSLog(@"[TikTokMod] #24 setSignupRegionWithType:regionModel: not found — locale/carrier spoof only (PARTIAL)");
+        return;
+    }
+    SEL ack = NSSelectorFromString(@"ackChangeRegionComplete");
+    if ([mgrCls respondsToSelector:ack]) {
+        ((void (*)(id, SEL))objc_msgSend)(mgrCls, ack);
+        NSLog(@"[TikTokMod] #24 ackChangeRegionComplete called");
+    }
+}
+
+static void TM3RefreshFeed(void) {
+    UIViewController *root = TM3KeyWindow().rootViewController;
+    UIViewController *feedVC = nil;
+    while (root) {
+        NSString *name = NSStringFromClass([root class]);
+        if ([name containsString:@"FeedContainer"] || [name containsString:@"FeedRoot"]) { feedVC = root; break; }
+        root = root.presentedViewController;
+    }
+    if (!feedVC) {
+        NSLog(@"[TikTokMod] #24 no feed VC on screen — pull to refresh the feed manually");
+        return;
+    }
+    for (NSString *key in @[@"dataController", @"listDataController", @"feedDataController", @"dataSource"]) {
+        id dc = TM3Value(feedVC, key);
+        if (!dc) continue;
+        SEL refresh = NSSelectorFromString(@"refreshWithCompletion:");
+        if ([dc respondsToSelector:refresh]) {
+            void (^empty)(void) = ^{};
+            ((void (*)(id, SEL, id))objc_msgSend)(dc, refresh, empty);
+            NSLog(@"[TikTokMod] #24 feed refresh requested via %@ (PARTIAL — server decides what it serves)", key);
+            return;
+        }
+        SEL refreshPlain = NSSelectorFromString(@"refresh");
+        if ([dc respondsToSelector:refreshPlain]) {
+            ((void (*)(id, SEL))objc_msgSend)(dc, refreshPlain);
+            NSLog(@"[TikTokMod] #24 feed refresh requested via %@.refresh", key);
+            return;
+        }
+    }
+    NSLog(@"[TikTokMod] #24 no refreshable data controller found — pull to refresh the feed manually");
+}
+
+static void TM3InstallRegion(void) {
+    if (!g3_localeSpoofInstalled) {
+        g3_localeSpoofInstalled = YES;
+        [TikTokMod safeSwizzleClassMethod:[NSLocale class]
+                         originalSelector:@selector(currentLocale)
+                         swizzledSelector:@selector(tm3_currentLocale)];
+        [TikTokMod safeSwizzleClassMethod:[NSLocale class]
+                         originalSelector:@selector(autoupdatingCurrentLocale)
+                         swizzledSelector:@selector(tm3_autoupdatingCurrentLocale)];
+        [TikTokMod safeSwizzleClass:[NSLocale class]
+                   originalSelector:@selector(objectForKey:)
+                   swizzledSelector:@selector(tm3_objectForKey:)];
+    }
+    if (!g3_installed_CTCarrier_iso) {
+        g3_installed_CTCarrier_iso = TM3InstallSite(@"CTCarrier", @selector(isoCountryCode),
+            (IMP)TM3Hook_CTCarrier_iso, &g3_orig_CTCarrier_iso, NO, '@');
+    }
+    if (!g3_installed_CTCarrier_mcc) {
+        g3_installed_CTCarrier_mcc = TM3InstallSite(@"CTCarrier", @selector(mobileCountryCode),
+            (IMP)TM3Hook_CTCarrier_mcc, &g3_orig_CTCarrier_mcc, NO, '@');
+    }
+    if (!g3_installed_RegionSettings) {
+        g3_installed_RegionSettings = TM3InstallSiteAuto(@"PNSChangeRegionSettingsModel",
+            @selector(isChangeRegionEnabled), (IMP)TM3Hook_RegionSettings_enabled,
+            &g3_orig_RegionSettings_enabled, 'B');
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Feature bodies — filled in per feature commit (E: #25, F: #27).
 // Until then each is a safe no-op that says so.
 // ---------------------------------------------------------------------------
 
@@ -801,6 +1049,7 @@ static NSString *g3_lastWebSourceURL = nil;
     TM3InstallPinningBypass();
     TM3InstallDownloadCapture();
     TM3InstallWebSources();
+    TM3InstallRegion();
 }
 
 + (NSString *)pinningBypassStatus {
@@ -950,13 +1199,54 @@ static NSString *g3_lastWebSourceURL = nil;
 }
 
 + (void)pickRegionFromViewController:(UIViewController *)vc {
-    // Filled in commit D (#24).
-    TM3AlertFrom(vc, @"Region switching (#24)",
-        @"Not implemented yet in this build — the region picker lands in the next commit.");
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Region switching (#24)"
+        message:@"PARTIAL — the client reports a different region; the server decides the feed (IP, SIM, account). A region change is never promised. Switching back restores the stock region."
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSString *> *quick = @[@"US", @"GB", @"JP", @"KR", @"BR", @"IN", @"ID", @"TR",
+                                   @"EG", @"SA", @"AE", @"DE", @"FR", @"CA", @"AU", @"IQ"];
+    for (NSString *code in quick) {
+        [sheet addAction:[UIAlertAction actionWithTitle:code style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+            [TM3Settings() setRegionCode:code];
+            [self applyStoredRegion];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Enter a code…" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+        UIAlertController *prompt = [UIAlertController alertControllerWithTitle:@"Region code (#24)"
+            message:@"ISO country code, e.g. US, JP, GB." preferredStyle:UIAlertControllerStyleAlert];
+        [prompt addTextFieldWithConfigurationHandler:^(UITextField *field) {
+            field.placeholder = @"US";
+            field.autocapitalizationType = UITextAutocapitalizationTypeAllCharacters;
+        }];
+        [prompt addAction:[UIAlertAction actionWithTitle:@"Apply" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *done) {
+            NSString *code = [[prompt.textFields.firstObject.text ?: @""]
+                stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]].uppercaseString;
+            if (code.length != 2) {
+                TM3AlertFrom(vc, @"Region switching (#24)", @"Enter a 2-letter ISO country code.");
+                return;
+            }
+            [TM3Settings() setRegionCode:code];
+            [self applyStoredRegion];
+        }]];
+        [prompt addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [vc presentViewController:prompt animated:YES completion:nil];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Restore stock region" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+        [TM3Settings() setRegionCode:nil];
+        [self applyStoredRegion];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [vc presentViewController:sheet animated:YES completion:nil];
 }
 
 + (void)applyStoredRegion {
-    // Filled in commit D (#24).
+    NSString *code = TM3RegionCodeIfOn();
+    if (!code) {
+        NSLog(@"[TikTokMod] #24 region toggle OFF or no code stored — stock region reporting");
+        return;
+    }
+    NSLog(@"[TikTokMod] #24 applying region %@ (PARTIAL — server decides the feed)", code);
+    TM3ApplyRegionManager(code);
+    TM3RefreshFeed();
 }
 
 + (void)downloadCurrentAudioFromViewController:(UIViewController *)vc {
