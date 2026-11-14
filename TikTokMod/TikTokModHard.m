@@ -1015,7 +1015,77 @@ static void TM3InstallRegion(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Feature bodies — filled in per feature commit (E: #25, F: #27).
+// #25 Audio-only download (to Music/TikTok)
+// Same §2.5 capture job as video: the music play URL comes from the current
+// video's aweme music model (KVC — the model keys are not in the evidence
+// files beyond the API names, so several likely keys are tried and a miss is
+// a no-op + alert, never a guess). The bytes are saved with the shared
+// TM3FetchURLToFile helper to Documents/TikTokMod/Music/ (design §2.5 step 4;
+// the KMPBridgeMdpResource stock APIs are hooked log-only below so a runtime
+// run shows whether stock itself downloads music — the dylib does NOT call
+// them with a fabricated descriptor, because the descriptor type is
+// unverified). Fallback per design: save the captured audio URL's bytes
+// directly with NSURLSession after the pinning bypass — that is exactly what
+// the hub action does. UNVERIFIED-RUNTIME.
+// ---------------------------------------------------------------------------
+
+static IMP g3_orig_Music_downloadDetail = NULL;
+static IMP g3_orig_Music_startDownload = NULL;
+static BOOL g3_installed_Music_downloadDetail = NO;
+static BOOL g3_installed_Music_startDownload = NO;
+
+static void TM3Hook_Music_downloadDetail(id self, SEL _cmd, id detail, id completion) {
+    if (TM3On(@"audioOnlyDownload")) {
+        NSLog(@"[TikTokMod] #25 KMPBridgeMdpResource downloadMusicWithDetail: called (stock music-download path; dylib saves audio via its own fetch — see the hub action)");
+    }
+    ((void (*)(id, SEL, id, id))g3_orig_Music_downloadDetail)(self, _cmd, detail, completion);
+}
+
+static void TM3Hook_Music_startDownload(id self, SEL _cmd, id descriptor, id url, id attemptID, id ready, id completion) {
+    if (TM3On(@"audioOnlyDownload")) {
+        NSLog(@"[TikTokMod] #25 KMPBridgeMdpResource startMusicAudioDownload… called for URL %@ (stock path)", TM3StringOfURLValue(url) ?: @"<unknown>");
+    }
+    ((void (*)(id, SEL, id, id, id, id, id))g3_orig_Music_startDownload)(self, _cmd, descriptor, url, attemptID, ready, completion);
+}
+
+static void TM3InstallAudio(void) {
+    if (!g3_installed_Music_downloadDetail) {
+        g3_installed_Music_downloadDetail = TM3InstallSite(@"KMPBridgeMdpResource",
+            NSSelectorFromString(@"downloadMusicWithDetail:completion:"),
+            (IMP)TM3Hook_Music_downloadDetail, &g3_orig_Music_downloadDetail, NO, 'v');
+    }
+    if (!g3_installed_Music_startDownload) {
+        g3_installed_Music_startDownload = TM3InstallSite(@"KMPBridgeMdpResource",
+            NSSelectorFromString(@"startMusicAudioDownloadWithDescriptor:url:attemptID:ready:completion:"),
+            (IMP)TM3Hook_Music_startDownload, &g3_orig_Music_startDownload, NO, 'v');
+    }
+}
+
+static NSString *TM3MusicDirectory(void) {
+    NSArray<NSString *> *dirs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *base = dirs.firstObject ?: NSTemporaryDirectory();
+    return [base stringByAppendingPathComponent:@"TikTokMod/Music"];
+}
+
+/// The current video's music play URL, from the aweme's music model.
+static NSString * _Nullable TM3CurrentAudioURL(void) {
+    id aweme = TM3CurrentAwemeModel();
+    if (!aweme) return nil;
+    id music = nil;
+    for (NSString *key in @[@"music", @"musicModel", @"audioModel"]) {
+        music = TM3Value(aweme, key);
+        if (music) break;
+    }
+    if (!music) return nil;
+    for (NSString *key in @[@"playUrl", @"play_url", @"playAddr", @"downloadUrl", @"url"]) {
+        NSString *url = TM3URLStringFromValue(TM3Value(music, key));
+        if (url) return url;
+    }
+    return nil;
+}
+
+// ---------------------------------------------------------------------------
+// Feature bodies — filled in per feature commit (F: #27).
 // Until then each is a safe no-op that says so.
 // ---------------------------------------------------------------------------
 
@@ -1050,6 +1120,7 @@ static NSString *g3_lastWebSourceURL = nil;
     TM3InstallDownloadCapture();
     TM3InstallWebSources();
     TM3InstallRegion();
+    TM3InstallAudio();
 }
 
 + (NSString *)pinningBypassStatus {
@@ -1250,9 +1321,25 @@ static NSString *g3_lastWebSourceURL = nil;
 }
 
 + (void)downloadCurrentAudioFromViewController:(UIViewController *)vc {
-    // Filled in commit E (#25).
-    TM3AlertFrom(vc, @"Audio-only download (#25)",
-        @"Not implemented yet in this build — the audio downloader lands in the next commit.");
+    if (!TM3On(@"audioOnlyDownload")) {
+        TM3AlertFrom(vc, @"Audio-only download (#25)",
+            @"Turn the toggle on first. UNVERIFIED-RUNTIME — it needs a runtime traffic capture proving the pinning bypass.");
+        return;
+    }
+    NSString *url = TM3CurrentAudioURL();
+    if (!url) {
+        TM3AlertFrom(vc, @"Audio-only download (#25)",
+            @"No audio URL could be found for the current video (the music model or its play URL was not reachable). UNVERIFIED-RUNTIME — the music play URL is read from the aweme's music model; if TikTok stores it under another key, this finds nothing and the stock playback is untouched.");
+        return;
+    }
+    NSString *fileName = TM3FileNameForURLString(url, @"mp3");
+    TM3FetchURLToFile(url, TM3MusicDirectory(), fileName, ^(NSString *savedPath, NSString *error) {
+        if (savedPath) {
+            TM3AlertFrom(vc, @"Audio-only download (#25)", [NSString stringWithFormat:@"Saved to %@.", savedPath]);
+        } else {
+            TM3AlertFrom(vc, @"Audio-only download (#25)", [NSString stringWithFormat:@"Download failed: %@", error]);
+        }
+    });
 }
 
 @end
