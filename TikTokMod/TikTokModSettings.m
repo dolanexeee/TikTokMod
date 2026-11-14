@@ -7,6 +7,15 @@
 #import "TikTokModSettings.h"
 
 static NSString * const kTikTokModSettingsSuite = @"com.tiktokmod.settings";
+NSString * const TikTokModSettingsDidChangeNotification = @"TikTokModSettingsDidChangeNotification";
+
+@interface TikTokModSettings ()
+- (void)postChangeForKey:(NSString *)key;
+- (NSString *)customBackgroundImageDirectory;
+@end
+
+/// Tag shared with TikTokModV1 overlays for the custom-background view.
+static const NSInteger kTMCustomBackgroundTag = 7008;
 
 @implementation TikTokModSettings
 
@@ -44,11 +53,11 @@ static NSString * const kTikTokModSettingsSuite = @"com.tiktokmod.settings";
         @{@"num": @9, @"key": @"redesignedModSettings", @"title": @"Redesigned mod settings (hub layout)", @"section": @"Mod", @"unverified": @NO},
         @{@"num": @10, @"key": @"downloadQualitySelection", @"title": @"Download quality selection (manual pick + skip-quality)", @"section": @"Downloads", @"unverified": @NO},
         @{@"num": @13, @"key": @"commentReposts", @"title": @"Comment reposts", @"section": @"Chats & Comments", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
-        @{@"num": @14, @"key": @"bannersNewProfileLayout", @"title": @"Banners + new profile layout unlocked", @"section": @"Profile & Appearance", @"unverified": @NO},
+        @{@"num": @14, @"key": @"bannersNewProfileLayout", @"title": @"Banners unlocked (new profile layout DEFERRED — no gate found)", @"section": @"Profile & Appearance", @"unverified": @NO, @"note": @"Banners only. The layout half has no evidence in either research pass — do not claim it."},
         @{@"num": @16, @"key": @"automaticStreaks", @"title": @"Automatic streaks — recipients + sticker, configurable timing", @"section": @"Chats & Comments", @"unverified": @NO},
         @{@"num": @17, @"key": @"sendPinLimitRemoval", @"title": @"Removed limits on sending videos + pinning chats", @"section": @"Chats & Comments", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
         @{@"num": @18, @"key": @"downloadWebSources", @"title": @"Downloads: web sources in source picker", @"section": @"Downloads", @"unverified": @NO},
-        @{@"num": @20, @"key": @"appIconSelection", @"title": @"App icon selection (7 launcher styles)", @"section": @"Profile & Appearance", @"unverified": @NO},
+        @{@"num": @20, @"key": @"appIconSelection", @"title": @"App icon selection (7 launcher styles)", @"section": @"Profile & Appearance", @"unverified": @NO, @"note": @"Icon sets must exist in the bundle at assembly time (TikTokMod/Icons/ + CFBundleAlternateIcons)."},
         @{@"num": @21, @"key": @"postDatesForYou", @"title": @"Post dates shown in the For You feed", @"section": @"Feed & Discovery", @"unverified": @NO},
         @{@"num": @22, @"key": @"contentFilters", @"title": @"Content filters — words, tags, likes, views", @"section": @"Feed & Discovery", @"unverified": @NO},
         @{@"num": @23, @"key": @"stickerDownloads", @"title": @"Sticker downloads", @"section": @"Downloads", @"unverified": @NO},
@@ -113,7 +122,100 @@ static NSString * const kTikTokModSettingsSuite = @"com.tiktokmod.settings";
     NSUserDefaults *defaults = [[self class] defaults];
     [defaults setBool:value forKey:key];
     [defaults synchronize];
+    [self postChangeForKey:key];
 }
+
+- (void)postChangeForKey:(NSString *)key {
+    if (!key) return;
+    void (^post)(void) = ^{
+        [[NSNotificationCenter defaultCenter]
+            postNotificationName:TikTokModSettingsDidChangeNotification
+                          object:self userInfo:@{@"key": key}];
+    };
+    if ([NSThread isMainThread]) post();
+    else dispatch_async(dispatch_get_main_queue(), post);
+}
+
+- (float)floatForKey:(NSString *)key defaultValue:(float)defaultValue {
+    if (!key) return defaultValue;
+    NSUserDefaults *defaults = [[self class] defaults];
+    if (![defaults objectForKey:key]) return defaultValue;
+    return [defaults floatForKey:key];
+}
+
+- (void)setFloat:(float)value forKey:(NSString *)key {
+    if (!key) return;
+    NSUserDefaults *defaults = [[self class] defaults];
+    [defaults setFloat:value forKey:key];
+    [defaults synchronize];
+    [self postChangeForKey:key];
+}
+
+- (NSInteger)integerForKey:(NSString *)key defaultValue:(NSInteger)defaultValue {
+    if (!key) return defaultValue;
+    NSUserDefaults *defaults = [[self class] defaults];
+    if (![defaults objectForKey:key]) return defaultValue;
+    return [defaults integerForKey:key];
+}
+
+- (void)setInteger:(NSInteger)value forKey:(NSString *)key {
+    if (!key) return;
+    NSUserDefaults *defaults = [[self class] defaults];
+    [defaults setInteger:value forKey:key];
+    [defaults synchronize];
+    [self postChangeForKey:key];
+}
+
+- (nullable NSString *)stringForKey:(NSString *)key {
+    if (!key) return nil;
+    return [[[self class] defaults] stringForKey:key];
+}
+
+- (void)setString:(nullable NSString *)value forKey:(NSString *)key {
+    if (!key) return;
+    NSUserDefaults *defaults = [[self class] defaults];
+    if (value) [defaults setObject:value forKey:key];
+    else [defaults removeObjectForKey:key];
+    [defaults synchronize];
+    [self postChangeForKey:key];
+}
+
+- (nullable NSArray<NSString *> *)arrayForKey:(NSString *)key {
+    if (!key) return nil;
+    return [[[self class] defaults] arrayForKey:key];
+}
+
+- (void)setArray:(nullable NSArray<NSString *> *)value forKey:(NSString *)key {
+    if (!key) return;
+    NSUserDefaults *defaults = [[self class] defaults];
+    if (value) [defaults setObject:value forKey:key];
+    else [defaults removeObjectForKey:key];
+    [defaults synchronize];
+    [self postChangeForKey:key];
+}
+
+- (float)playbackRateValue { return [self floatForKey:@"playbackRateValue" defaultValue:1.0f]; }
+- (void)setPlaybackRateValue:(float)value { [self setFloat:value forKey:@"playbackRateValue"]; }
+- (float)feedOverlayOpacity { return [self floatForKey:@"feedOverlayOpacity" defaultValue:0.12f]; }
+- (void)setFeedOverlayOpacity:(float)value { [self setFloat:value forKey:@"feedOverlayOpacity"]; }
+- (float)hideUIOpacityValue { return [self floatForKey:@"hideUIOpacityValue" defaultValue:0.0f]; }
+- (void)setHideUIOpacityValue:(float)value { [self setFloat:value forKey:@"hideUIOpacityValue"]; }
+- (NSInteger)fakeStatusBarSignalBars { return [self integerForKey:@"fakeStatusBarSignalBars" defaultValue:4]; }
+- (void)setFakeStatusBarSignalBars:(NSInteger)value { [self setInteger:value forKey:@"fakeStatusBarSignalBars"]; }
+- (BOOL)fakeStatusBarWifiEnabled {
+    NSUserDefaults *d = [[self class] defaults];
+    if (![d objectForKey:@"fakeStatusBarWifiEnabled"]) return YES;
+    return [d boolForKey:@"fakeStatusBarWifiEnabled"];
+}
+- (void)setFakeStatusBarWifiEnabled:(BOOL)value { [self setBool:value forKey:@"fakeStatusBarWifiEnabled"]; }
+- (nullable NSString *)telegramCommunityURL { return [self stringForKey:@"telegramCommunityURL"]; }
+- (void)setTelegramCommunityURL:(nullable NSString *)value { [self setString:value forKey:@"telegramCommunityURL"]; }
+- (nullable NSString *)selectedAlternateIconName { return [self stringForKey:@"selectedAlternateIconName"]; }
+- (void)setSelectedAlternateIconName:(nullable NSString *)value { [self setString:value forKey:@"selectedAlternateIconName"]; }
+- (nullable NSArray<NSString *> *)hiddenElementClasses { return [self arrayForKey:@"hiddenElementClasses"]; }
+- (void)setHiddenElementClasses:(nullable NSArray<NSString *> *)value { [self setArray:value forKey:@"hiddenElementClasses"]; }
+- (nullable NSString *)modButtonCenter { return [self stringForKey:@"modButtonCenter"]; }
+- (void)setModButtonCenter:(nullable NSString *)value { [self setString:value forKey:@"modButtonCenter"]; }
 
 - (BOOL)interfaceEditor { return [self boolForKey:@"interfaceEditor"]; }
 - (void)setInterfaceEditor:(BOOL)value { [self setBool:value forKey:@"interfaceEditor"]; }
@@ -303,13 +405,43 @@ static NSString * const kTikTokModSettingsSuite = @"com.tiktokmod.settings";
 }
 
 - (void)applyCustomBackgroundToView:(UIView *)view {
-    // STUB — the real overlay view lands with the research hooks.
-    // Recorded choice only; applying nothing yet so video rendering and
-    // text readability cannot break at this stage.
+    // Real implementation (DYLIB-DESIGN.md §2.6): bottom subview only.
+    // The video layer stays topmost and opaque; a dark scrim behind captions
+    // is added per-cell by TikTokModV1. Never translucent video.
     if (!view) return;
-    NSLog(@"[TikTokMod] applyCustomBackgroundToView: STUB (mode=%@ hex=%@ image=%@) — overlay not applied yet",
-          self.customBackgroundMode, self.customBackgroundColorHex ?: @"-",
-          self.customBackgroundImage ? @"set" : @"none");
+    UIView *old = [view viewWithTag:kTMCustomBackgroundTag];
+    if (old) [old removeFromSuperview];
+    if (!self.customBackground) return;
+    NSString *mode = self.customBackgroundMode;
+    if ([mode isEqualToString:@"none"]) return;
+    UIView *bg = nil;
+    if ([mode isEqualToString:@"image"]) {
+        UIImage *image = self.customBackgroundImage;
+        if (!image) {
+            NSLog(@"[TikTokMod] applyCustomBackgroundToView: image mode but no image stored (fail-soft)");
+            return;
+        }
+        UIImageView *imageView = [[UIImageView alloc] initWithImage:image];
+        imageView.contentMode = UIViewContentModeScaleAspectFill;
+        imageView.clipsToBounds = YES;
+        bg = imageView;
+    } else if ([mode isEqualToString:@"color"]) {
+        UIColor *color = self.customBackgroundColor;
+        if (!color) {
+            NSLog(@"[TikTokMod] applyCustomBackgroundToView: color mode but bad hex %@ (fail-soft)",
+                  self.customBackgroundColorHex ?: @"-");
+            return;
+        }
+        bg = [[UIView alloc] init];
+        bg.backgroundColor = color;
+    } else {
+        return;
+    }
+    bg.tag = kTMCustomBackgroundTag;
+    bg.frame = view.bounds;
+    bg.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [view insertSubview:bg atIndex:0];
+    NSLog(@"[TikTokMod] #45 custom background applied (mode=%@) as bottom subview", mode);
 }
 
 @end

@@ -22,6 +22,10 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Posted (main thread) whenever a toggle or value key changes.
+/// userInfo: @{@"key": <changed key>}. Overlays listen and re-apply.
+extern NSString * const TikTokModSettingsDidChangeNotification;
+
 @interface TikTokModSettings : NSObject
 
 + (instancetype)shared;
@@ -39,6 +43,35 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)boolForKey:(NSString *)key;
 - (void)setBool:(BOOL)value forKey:(NSString *)key;
 
+// Generic value keys (V1, DYLIB-DESIGN.md §2.3). All post the change notification.
+- (float)floatForKey:(NSString *)key defaultValue:(float)defaultValue;
+- (void)setFloat:(float)value forKey:(NSString *)key;
+- (NSInteger)integerForKey:(NSString *)key defaultValue:(NSInteger)defaultValue;
+- (void)setInteger:(NSInteger)value forKey:(NSString *)key;
+- (nullable NSString *)stringForKey:(NSString *)key;
+- (void)setString:(nullable NSString *)value forKey:(NSString *)key;
+- (nullable NSArray<NSString *> *)arrayForKey:(NSString *)key;
+- (void)setArray:(nullable NSArray<NSString *> *)value forKey:(NSString *)key;
+
+/// #2 — last chosen playback rate (default 1.0).
+@property (nonatomic, assign) float playbackRateValue;
+/// #8 — burn-in dim overlay alpha (default 0.12).
+@property (nonatomic, assign) float feedOverlayOpacity;
+/// #29 — hide-UI opacity applied to the interaction elements (default 0.0 = hidden).
+@property (nonatomic, assign) float hideUIOpacityValue;
+/// #39 — fake status bar: user-set signal bars 0-4 (default 4). No live API exists.
+@property (nonatomic, assign) NSInteger fakeStatusBarSignalBars;
+/// #39 — fake status bar: show the Wi-Fi glyph (default YES). User-set, not live.
+@property (nonatomic, assign) BOOL fakeStatusBarWifiEnabled;
+/// #42 — Telegram community URL (hub config; no concrete URL exists in the research).
+@property (nonatomic, copy, nullable) NSString *telegramCommunityURL;
+/// #20 — selected alternate icon name (nil = stock Default).
+@property (nonatomic, copy, nullable) NSString *selectedAlternateIconName;
+/// #1 — element class names hidden by the interface editor.
+@property (nonatomic, copy, nullable) NSArray<NSString *> *hiddenElementClasses;
+/// #9 — persisted Mod-button position ("x,y") after the user drags it.
+@property (nonatomic, copy, nullable) NSString *modButtonCenter;
+
 // --- #45 Custom Background (Mustafa's own request, not from TikTok You) ---
 // Toggle itself is the `customBackground` BOOL property (registry #45).
 // Mode: @"image" | @"color" | @"none". Image is stored as a JPEG file under
@@ -51,9 +84,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)saveCustomBackgroundImage:(UIImage *)image;
 - (void)clearCustomBackgroundImage;
 - (nullable UIColor *)customBackgroundColor;
-/// Stub for now: logs the stored choice. The real overlay background view
-/// (behind the feed, must not break video rendering or text readability)
-/// lands with the research hooks — do NOT call this as if it worked yet.
+/// Inserts the stored background (image or color) as the BOTTOM subview of
+/// `view` — behind the video layer, which stays topmost and opaque (§2.6).
+/// Removing it when the toggle is OFF / mode is none. Fail-soft: nil view,
+/// missing image or bad hex = log and do nothing.
 - (void)applyCustomBackgroundToView:(UIView *)view;
 
 @property (nonatomic, assign) BOOL interfaceEditor;  // #1 Interface editor — hide any element, one tap
