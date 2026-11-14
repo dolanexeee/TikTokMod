@@ -149,13 +149,27 @@ static BOOL TM2InstallSite(NSString *className, SEL origSel, IMP newImp, IMP *ou
         BOOL ok = NO;
         if (kind == 'B') ok = (got == 'B' || got == 'c');
         else if (kind == 'i') ok = (got == 'q' || got == 'i' || got == 'l' || got == 's' ||
-                                    got == 'I' || got == 'L' || got == 'S');
+                                    got == 'I' || got == 'L' || got == 'S' || got == 'Q');
         else ok = (got == kind);
         if (!ok) {
             NSLog(@"[TikTokMod] V2 site %@ %@: unexpected return type '%c' (wanted '%c'), skipping (fail-soft)",
                   className, NSStringFromSelector(origSel), got, kind);
             return NO;
         }
+    }
+    // Safe install (avoids V1's latent hazard): if the class does NOT
+    // implement the selector itself (it is inherited, e.g. a view
+    // controller's viewDidLayoutSubviews), exchanging implementations would
+    // swap the SUPERCLASS's method and hook every subclass. Instead, ADD
+    // our IMP as the class's own method and keep the inherited IMP as the
+    // original. Only exchange when the class already has its own method.
+    *outOrig = method_getImplementation(m);
+    if (class_addMethod(target, origSel, newImp, method_getTypeEncoding(m))) {
+        NSString *aliasName = [@"tm2_orig_" stringByAppendingString:NSStringFromSelector(origSel)];
+        SEL aliasSel = NSSelectorFromString(aliasName);
+        class_addMethod(target, aliasSel, *outOrig, method_getTypeEncoding(m));
+        NSLog(@"[TikTokMod] V2 hook installed (added override): %@ %@", className, NSStringFromSelector(origSel));
+        return YES;
     }
     NSString *aliasName = [@"tm2_orig_" stringByAppendingString:NSStringFromSelector(origSel)];
     SEL aliasSel = NSSelectorFromString(aliasName);
@@ -164,7 +178,6 @@ static BOOL TM2InstallSite(NSString *className, SEL origSel, IMP newImp, IMP *ou
               className, NSStringFromSelector(origSel), aliasName);
         return NO;
     }
-    *outOrig = method_getImplementation(m);
     Method aliasMethod = class_getInstanceMethod(target, aliasSel);
     method_exchangeImplementations(m, aliasMethod);
     NSLog(@"[TikTokMod] V2 hook installed: %@ %@", className, NSStringFromSelector(origSel));

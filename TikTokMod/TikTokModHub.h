@@ -1,7 +1,7 @@
 //
 //  TikTokModHub.h
 //  TikTokMod — settings hub UI (plain UITableViewController), driven by
-//  the TikTokModSettings feature registry (40 toggles, grouped by section).
+//  the TikTokModSettings feature registry (42 toggles, grouped by section).
 //  Skeleton only: rows toggle stub settings; no TikTok hooks.
 //
 #import <UIKit/UIKit.h>

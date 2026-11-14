@@ -11,6 +11,7 @@
 #import "TikTokModHub.h"
 #import "TikTokModSettings.h"
 #import "TikTokModV1.h"
+#import "TikTokModV2.h"
 
 @interface TikTokModHub () <UIImagePickerControllerDelegate, UINavigationControllerDelegate,
                             UISearchResultsUpdating>
@@ -116,6 +117,23 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
             @{@"id": @"hideUIOpacity", @"title": @"Hide-UI opacity (#29)"},
             @{@"id": @"burnInOpacity", @"title": @"Anti-burn-in dim opacity (#8)"},
             @{@"id": @"fakeStatusBar", @"title": @"Fake status bar — signal / Wi-Fi (#39)"},
+            @{@"id": @"autoScroll", @"title": @"Auto-scroll options — delay / mode (#31)"},
+        ];
+    }
+    if ([section isEqualToString:@"Posting & Camera"]) {
+        return @[
+            @{@"id": @"flash", @"title": @"Colored selfie flash — experimental (#7)"},
+        ];
+    }
+    if ([section isEqualToString:@"Chats & Comments"]) {
+        return @[
+            @{@"id": @"streaks", @"title": @"Automatic streaks — recipients / sticker / timing (#16)"},
+            @{@"id": @"streakSendNow", @"title": @"Send one streak round now (#16)"},
+        ];
+    }
+    if ([section isEqualToString:@"Downloads"]) {
+        return @[
+            @{@"id": @"offlineCount", @"title": @"Offline video count (#19)"},
         ];
     }
     if ([section isEqualToString:@"Profile & Appearance"]) {
@@ -124,6 +142,9 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
             [rows addObject:@{@"id": [@"icon-" stringByAppendingString:icon[@"title"]],
                               @"title": [@"App icon: " stringByAppendingString:icon[@"title"]]}];
         }
+        [rows addObject:@{@"id": @"customFont", @"title": @"Custom font — system or named (#32)"}];
+        [rows addObject:@{@"id": @"themeAccent", @"title": @"Theme accent color — feed chrome (#33)"}];
+        [rows addObject:@{@"id": @"themeBackground", @"title": @"Theme background color — feed chrome (#33)"}];
         return [rows copy];
     }
     if ([section isEqualToString:@"Mod"]) {
@@ -136,6 +157,10 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
     if ([section isEqualToString:@"Feed & Discovery"]) {
         return @[
             @{@"id": @"unhideAll", @"title": @"Unhide all elements hidden by the editor (#1)"},
+            @{@"id": @"filterWords", @"title": @"Content filter words & tags (#22)"},
+            @{@"id": @"filterMinLikes", @"title": @"Content filter — minimum likes (#22)"},
+            @{@"id": @"filterMinViews", @"title": @"Content filter — minimum views (#22)"},
+            @{@"id": @"keywordEditor", @"title": @"Open TikTok's own keyword editor (#22)"},
         ];
     }
     return @[];
@@ -175,6 +200,50 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
     if ([rowId isEqualToString:@"unhideAll"]) {
         return [NSString stringWithFormat:@"%lu element class(es) hidden",
                 (unsigned long)(s.hiddenElementClasses.count)];
+    }
+    if ([rowId isEqualToString:@"autoScroll"]) {
+        return [NSString stringWithFormat:@"Delay %.0fs, %@ — tap to change",
+                s.autoScrollDelaySeconds,
+                s.autoScrollOnlyAfterFullWatch ? @"only after full watch" : @"timed (always)"];
+    }
+    if ([rowId isEqualToString:@"flash"]) {
+        return [NSString stringWithFormat:@"Sub-toggle %@, color %@ — tap to change (EXPERIMENTAL, PARTIAL)",
+                s.coloredSelfieFlashEnabled ? @"ON" : @"OFF", s.frontFlashColorHex];
+    }
+    if ([rowId isEqualToString:@"streaks"]) {
+        return [NSString stringWithFormat:@"%lu recipient(s), every %ld min, sticker %@ — tap to change",
+                (unsigned long)(s.streakRecipients.count), (long)s.streakIntervalMinutes,
+                s.streakStickerID.length > 0 ? s.streakStickerID : @"none"];
+    }
+    if ([rowId isEqualToString:@"streakSendNow"]) {
+        return @"Sends one round now via the stock send path";
+    }
+    if ([rowId isEqualToString:@"filterWords"]) {
+        return [NSString stringWithFormat:@"%lu word(s), %lu tag(s) — tap to change",
+                (unsigned long)(s.filterWords.count), (unsigned long)(s.filterTags.count)];
+    }
+    if ([rowId isEqualToString:@"filterMinLikes"]) {
+        return [NSString stringWithFormat:@"Min likes: %ld (0 = no floor) — tap to change", (long)s.filterMinLikes];
+    }
+    if ([rowId isEqualToString:@"filterMinViews"]) {
+        return [NSString stringWithFormat:@"Min views: %ld (0 = no floor) — tap to change", (long)s.filterMinViews];
+    }
+    if ([rowId isEqualToString:@"keywordEditor"]) {
+        return @"Opens TikTok's own keyword-filter editor";
+    }
+    if ([rowId isEqualToString:@"offlineCount"]) {
+        return [NSString stringWithFormat:@"Fetch count: %ld (default 500) — tap to change", (long)s.offlineVideoCount];
+    }
+    if ([rowId isEqualToString:@"customFont"]) {
+        return [NSString stringWithFormat:@"Font: %@ — tap to change", s.customFontName];
+    }
+    if ([rowId isEqualToString:@"themeAccent"]) {
+        return [NSString stringWithFormat:@"Accent: %@ (feed chrome only) — tap to change",
+                s.themeAccentColorHex ?: @"stock"];
+    }
+    if ([rowId isEqualToString:@"themeBackground"]) {
+        return [NSString stringWithFormat:@"Background: %@ (feed chrome only) — tap to change",
+                s.themeBackgroundColorHex ?: @"stock"];
     }
     return nil;
 }
@@ -223,7 +292,7 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     if (section == (NSInteger)[self tm_visibleSections].count - 1 && ![self tm_isSearching]) {
-        return @"TikTokMod 47.7.0 V1 — 24 features implemented per DYLIB-DESIGN.md §4. "
+        return @"TikTokMod 47.7.0 V2 — 37 features implemented per DYLIB-DESIGN.md §4. "
                @"Compile-verified only: no iOS device exists on the build VM, so no hook is "
                @"runtime-tested — test on a secondary account only. Series unlock is impossible "
                @"and is never attempted (hide only). UNVERIFIED rows lift a client limit the "
@@ -329,6 +398,44 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
     [self handleExtraRow:extra[@"id"]];
 }
 
+#pragma mark - V2 config helpers (text entry + comma lists)
+
+- (void)tm_presentTextEntryWithTitle:(NSString *)title
+                             message:(NSString *)message
+                         placeholders:(NSArray<NSString *> *)placeholders
+                             initials:(NSArray<NSString *> *)initials
+                              handler:(void (^)(NSArray<NSString *> *texts))handler {
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:title
+                                                               message:message
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+    for (NSUInteger i = 0; i < placeholders.count; i++) {
+        NSString *ph = placeholders[i];
+        NSString *initial = i < initials.count ? initials[i] : nil;
+        [a addTextFieldWithConfigurationHandler:^(UITextField *tf) {
+            tf.placeholder = ph;
+            tf.text = initial;
+        }];
+    }
+    [a addAction:[UIAlertAction actionWithTitle:@"Save" style:UIAlertActionStyleDefault
+                                        handler:^(__unused UIAlertAction *act) {
+        NSMutableArray<NSString *> *texts = [NSMutableArray array];
+        for (UITextField *tf in a.textFields) [texts addObject:tf.text ?: @""];
+        if (handler) handler([texts copy]);
+        [self.tableView reloadData];
+    }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+}
+
+- (NSArray<NSString *> *)tm_commaListFromString:(NSString *)string {
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
+    for (NSString *part in [string componentsSeparatedByString:@","]) {
+        NSString *t = [part stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (t.length > 0) [out addObject:t];
+    }
+    return [out copy];
+}
+
 - (void)handleExtraRow:(NSString *)rowId {
     TikTokModSettings *s = [TikTokModSettings shared];
     if ([rowId isEqualToString:@"speed"]) {
@@ -412,6 +519,196 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
         [s setHiddenElementClasses:nil];
         NSLog(@"[TikTokMod] #1 unhid all editor-hidden elements");
         [self.tableView reloadData];
+    } else if ([rowId isEqualToString:@"autoScroll"]) {
+        UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Auto-scroll (#31)"
+            message:@"Advance to the next video automatically. End-of-video mode waits for the video to finish; timed mode advances after the delay even mid-video."
+            preferredStyle:UIAlertControllerStyleActionSheet];
+        for (NSNumber *secs in @[@0, @1, @3, @5]) {
+            [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Delay: %@s", secs]
+                style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+                s.autoScrollDelaySeconds = secs.floatValue;
+                s.autoScrollAutoPlayNext = YES;
+                [self.tableView reloadData];
+            }]];
+        }
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Mode: only after full watch" style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *a) {
+            s.autoScrollOnlyAfterFullWatch = YES;
+            s.autoScrollAutoPlayNext = YES;
+            [self.tableView reloadData];
+        }]];
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Mode: timed — advance even mid-video" style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *a) {
+            s.autoScrollOnlyAfterFullWatch = NO;
+            s.autoScrollAutoPlayNext = YES;
+            [self.tableView reloadData];
+        }]];
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentActionSheet:sheet];
+    } else if ([rowId isEqualToString:@"flash"]) {
+        UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Colored selfie flash (#7)"
+            message:@"EXPERIMENTAL (PARTIAL): frontFlashColor is a real field, not a proven user-facing toggle. Verify on device whether a colored flash UI appears."
+            preferredStyle:UIAlertControllerStyleActionSheet];
+        [sheet addAction:[UIAlertAction actionWithTitle:s.coloredSelfieFlashEnabled ? @"Flash color: turn OFF" : @"Flash color: turn ON"
+            style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+            s.coloredSelfieFlashEnabled = !s.coloredSelfieFlashEnabled;
+            s.cameraExtras = YES;
+            [self.tableView reloadData];
+        }]];
+        for (NSArray<NSString *> *choice in @[@[@"White", @"#FFFFFF"], @[@"Warm", @"#FFE0B2"],
+                                               @[@"Cyan", @"#25F4EE"], @[@"Pink", @"#FE2C55"],
+                                               @[@"Blue", @"#3B82F6"]]) {
+            [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@ (%@)", choice[0], choice[1]]
+                style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+                s.frontFlashColorHex = choice[1];
+                s.coloredSelfieFlashEnabled = YES;
+                s.cameraExtras = YES;
+                [self.tableView reloadData];
+            }]];
+        }
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentActionSheet:sheet];
+    } else if ([rowId isEqualToString:@"streaks"]) {
+        [self tm_presentTextEntryWithTitle:@"Automatic streaks (#16)"
+            message:@"Conversation IDs that receive the streak invite (comma-separated, your picks only), the sticker ID, and the interval in minutes. The timer drives the stock send path — it never sends to anyone you did not list."
+            placeholders:@[@"Conversation IDs, comma-separated", @"Sticker ID (optional)", @"Interval in minutes"]
+            initials:@[[[s streakRecipients] componentsJoinedByString:@", "] ?: @"",
+                       [s streakStickerID] ?: @"",
+                       [NSString stringWithFormat:@"%ld", (long)s.streakIntervalMinutes]]
+            handler:^(NSArray<NSString *> *texts) {
+                s.streakRecipients = [self tm_commaListFromString:texts[0]];
+                s.streakStickerID = texts[1].length > 0 ? texts[1] : nil;
+                NSInteger mins = [texts[2] integerValue];
+                s.streakIntervalMinutes = mins > 0 ? mins : 60;
+                s.automaticStreaks = YES;
+                [TikTokModV2 refreshStreakTimer];
+            }];
+    } else if ([rowId isEqualToString:@"streakSendNow"]) {
+        [TikTokModV2 sendStreaksNow];
+        [self.tableView reloadData];
+    } else if ([rowId isEqualToString:@"filterWords"]) {
+        [self tm_presentTextEntryWithTitle:@"Content filters (#22)"
+            message:@"Words and tags (comma-separated). A feed item whose caption or hashtags contain a word/tag is hidden. Likes/views floors are set in their own rows."
+            placeholders:@[@"Words, comma-separated", @"Tags, comma-separated"]
+            initials:@[[[s filterWords] componentsJoinedByString:@", "] ?: @"",
+                       [[s filterTags] componentsJoinedByString:@", "] ?: @""]
+            handler:^(NSArray<NSString *> *texts) {
+                s.filterWords = [self tm_commaListFromString:texts[0]];
+                s.filterTags = [self tm_commaListFromString:texts[1]];
+                s.contentFilters = YES;
+            }];
+    } else if ([rowId isEqualToString:@"filterMinLikes"]) {
+        UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Minimum likes (#22)"
+            message:@"Feed items with fewer likes than this are hidden. 0 = no floor."
+            preferredStyle:UIAlertControllerStyleActionSheet];
+        for (NSNumber *n in @[@0, @100, @1000, @10000, @100000]) {
+            [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@ likes", n]
+                style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+                s.filterMinLikes = n.integerValue;
+                s.contentFilters = YES;
+                [self.tableView reloadData];
+            }]];
+        }
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentActionSheet:sheet];
+    } else if ([rowId isEqualToString:@"filterMinViews"]) {
+        UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Minimum views (#22)"
+            message:@"Feed items with fewer views than this are hidden. 0 = no floor."
+            preferredStyle:UIAlertControllerStyleActionSheet];
+        for (NSNumber *n in @[@0, @1000, @10000, @100000, @1000000]) {
+            [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@ views", n]
+                style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+                s.filterMinViews = n.integerValue;
+                s.contentFilters = YES;
+                [self.tableView reloadData];
+            }]];
+        }
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentActionSheet:sheet];
+    } else if ([rowId isEqualToString:@"keywordEditor"]) {
+        [TikTokModV2 openStockKeywordFilterFromViewController:self];
+    } else if ([rowId isEqualToString:@"offlineCount"]) {
+        UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Offline video count (#19)"
+            message:@"How many videos the offline fetcher requests. No iOS twin of Android's \"2,000\" exists — this tunes the count path instead."
+            preferredStyle:UIAlertControllerStyleActionSheet];
+        for (NSNumber *n in @[@100, @250, @500, @1000]) {
+            [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@ videos", n]
+                style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+                s.offlineVideoCount = n.integerValue;
+                s.offlineVideoLimit = YES;
+                [self.tableView reloadData];
+            }]];
+        }
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentActionSheet:sheet];
+    } else if ([rowId isEqualToString:@"customFont"]) {
+        UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Custom font (#32)"
+            message:@"System = the iOS system font for every request. A named font must be installed on the device (PostScript name); an unknown name falls back to the system font."
+            preferredStyle:UIAlertControllerStyleActionSheet];
+        for (NSString *name in @[@"System", @"HelveticaNeue", @"Georgia", @"Courier", @"AvenirNext-Regular"]) {
+            [sheet addAction:[UIAlertAction actionWithTitle:name style:UIAlertActionStyleDefault
+                handler:^(__unused UIAlertAction *a) {
+                s.customFontName = name;
+                s.customFonts = YES;
+                [self.tableView reloadData];
+            }]];
+        }
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Type a PostScript name…" style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *a) {
+            [self tm_presentTextEntryWithTitle:@"Custom font (#32)"
+                message:@"Enter the font's PostScript name exactly."
+                placeholders:@[@"PostScript font name"]
+                initials:@[[s customFontName] ?: @"System"]
+                handler:^(NSArray<NSString *> *texts) {
+                    if (texts[0].length > 0) {
+                        s.customFontName = texts[0];
+                        s.customFonts = YES;
+                    }
+                }];
+        }]];
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentActionSheet:sheet];
+    } else if ([rowId isEqualToString:@"themeAccent"]) {
+        UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Theme accent color (#33)"
+            message:@"Feed chrome only (right rail + container tint). Per-surface — no global theme engine (DEFER)."
+            preferredStyle:UIAlertControllerStyleActionSheet];
+        [sheet addAction:[UIAlertAction actionWithTitle:@"None (stock)" style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *a) {
+            s.themeAccentColorHex = nil;
+            [self.tableView reloadData];
+        }]];
+        for (NSArray<NSString *> *choice in @[@[@"TikTok cyan", @"#25F4EE"], @[@"TikTok red", @"#FE2C55"],
+                                               @[@"Purple", @"#8B5CF6"], @[@"Green", @"#22C55E"],
+                                               @[@"Orange", @"#F97316"]]) {
+            [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@ (%@)", choice[0], choice[1]]
+                style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+                s.themeAccentColorHex = choice[1];
+                s.customColorsTheming = YES;
+                [self.tableView reloadData];
+            }]];
+        }
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentActionSheet:sheet];
+    } else if ([rowId isEqualToString:@"themeBackground"]) {
+        UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Theme background color (#33)"
+            message:@"Feed chrome only (bottom bar / tab bar). Per-surface — no global theme engine (DEFER)."
+            preferredStyle:UIAlertControllerStyleActionSheet];
+        [sheet addAction:[UIAlertAction actionWithTitle:@"None (stock)" style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *a) {
+            s.themeBackgroundColorHex = nil;
+            [self.tableView reloadData];
+        }]];
+        for (NSArray<NSString *> *choice in @[@[@"Black", @"#000000"], @[@"Dark gray", @"#1F1F1F"],
+                                               @[@"Navy", @"#1A1A2E"], @[@"Dark purple", @"#2D1B4E"]]) {
+            [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@ (%@)", choice[0], choice[1]]
+                style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+                s.themeBackgroundColorHex = choice[1];
+                s.customColorsTheming = YES;
+                [self.tableView reloadData];
+            }]];
+        }
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentActionSheet:sheet];
     }
 }
 
