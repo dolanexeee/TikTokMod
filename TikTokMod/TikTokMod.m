@@ -5,12 +5,13 @@
 #import "TikTokModHub.h"
 #import "TikTokModSettings.h"
 #import "TikTokModV1.h"
+#import "TikTokModV2.h"
 
 __attribute__((constructor))
 static void TikTokModInit(void) {
     @autoreleasepool {
         NSLog(@"TikTokMod loaded");
-        NSLog(@"[TikTokMod] TikTokMod loaded (47.7.0 V1, 24 features per DYLIB-DESIGN.md §4)");
+        NSLog(@"[TikTokMod] TikTokMod loaded (47.7.0 V2, 37 features per DYLIB-DESIGN.md §4)");
         [TikTokMod installHooks];
     }
 }
@@ -23,8 +24,9 @@ static void TikTokModInit(void) {
     // retried from AWEFeedRootViewController viewDidLoad if its class was
     // not yet loaded. Behaviour is gated per call by the live toggle.
     [TikTokModV1 installV1Hooks];
+    [TikTokModV2 installV2Hooks];
     (void)[TikTokModSettings shared];
-    NSLog(@"[TikTokMod] installHooks: V1 installed (41 toggle slots registered; "
+    NSLog(@"[TikTokMod] installHooks: V1+V2 installed (42 toggle slots registered; "
           @"compile-verified only — no iOS device on the build VM, nothing runtime-tested)");
 }
 

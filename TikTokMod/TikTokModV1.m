@@ -10,6 +10,7 @@
 #import "TikTokMod.h"
 #import "TikTokModHub.h"
 #import "TikTokModSettings.h"
+#import "TikTokModV2.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
 
@@ -230,8 +231,8 @@ static double TMPlayerDuration(id player) {
     label(@"TikTokMod is an unofficial modification, not affiliated with or endorsed by TikTok / ByteDance. "
           @"Use at your own risk, on a secondary account only. TikTok detects modified clients.", 14, NO);
     label(@"Stats", 17, YES);
-    label([NSString stringWithFormat:@"Base: TikTok 47.7.0 (477034)  •  V1: 24 features  •  Hub: %@",
-           [TikTokModSettings allFeatureKeys].count == 41 ? @"41 toggles" : @"registry"], 14, NO);
+    label([NSString stringWithFormat:@"Base: TikTok 47.7.0 (477034)  •  V2: 37 features (24 V1 + 13 V2)  •  Hub: %lu toggles",
+           (unsigned long)[TikTokModSettings allFeatureKeys].count], 14, NO);
     UIButton *go = [UIButton buttonWithType:UIButtonTypeSystem];
     [go setTitle:@"Continue to TikTok" forState:UIControlStateNormal];
     go.titleLabel.font = [UIFont boldSystemFontOfSize:17];
@@ -1099,7 +1100,8 @@ static id TMHook_DataSource_filteredDataSource(id self, SEL _cmd) {
     BOOL hidePhoto = TMOn(@"hidePhotoMode");
     BOOL hideLive = TMOn(@"hideLiveEntries");
     BOOL hideSeries = TMOn(@"hideSeriesRows");
-    if (!hidePhoto && !hideLive && !hideSeries) return orig;
+    BOOL v2Filters = TMOn(@"contentFilters");
+    if (!hidePhoto && !hideLive && !hideSeries && !v2Filters) return orig;
     NSMutableArray *kept = [NSMutableArray arrayWithCapacity:orig.count];
     for (id item in orig) {
         BOOL drop = NO;
@@ -1108,10 +1110,12 @@ static id TMHook_DataSource_filteredDataSource(id self, SEL _cmd) {
             if (TMBoolValue(item, @"judgeWhetherHasLiveRoomModel") || TMValue(item, @"liveRoomModel") != nil) drop = YES;
         }
         if (!drop && hideSeries && TMBoolValue(item, @"is_series")) drop = YES;
+        // #22 (V2) — words/tags/likes/views predicate (toggle-gated inside).
+        if (!drop && v2Filters && [TikTokModV2 shouldDropFeedItem:item]) drop = YES;
         if (!drop) [kept addObject:item];
     }
     if (kept.count != orig.count) {
-        NSLog(@"[TikTokMod] filteredDataSource: %lu -> %lu items (photo/live/series hides)",
+        NSLog(@"[TikTokMod] filteredDataSource: %lu -> %lu items (photo/live/series/#22 hides)",
               (unsigned long)orig.count, (unsigned long)kept.count);
     }
     return [kept copy];
@@ -1404,6 +1408,7 @@ static BOOL g_v1InstalledAppDelegate = NO;
 
 + (void)tm_feedRootAppeared:(UIViewController *)vc {
     [self retryDeferredInstalls];
+    [TikTokModV2 retryDeferredInstalls];
     if (vc.view && TMOn(@"customBackground")) {
         [self tm_applyCustomBackgroundToView:vc.view];
     }
