@@ -48,7 +48,7 @@ static const NSInteger kTMCustomBackgroundTag = 7008;
         @{@"num": @4, @"key": @"readAllChats", @"title": @"\"Read all\" button when selecting chats", @"section": @"Chats & Comments", @"unverified": @NO},
         @{@"num": @5, @"key": @"comments9Images", @"title": @"Comments with up to 9 images", @"section": @"Chats & Comments", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
         @{@"num": @6, @"key": @"hashtagLimitRemoval", @"title": @"Removed hashtag limit when posting", @"section": @"Posting & Camera", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
-        @{@"num": @7, @"key": @"cameraExtras", @"title": @"Camera extras: teleprompter, green screen, selfie flash, AI meme", @"section": @"Posting & Camera", @"unverified": @NO},
+        @{@"num": @7, @"key": @"cameraExtras", @"title": @"Camera extras: teleprompter, green screen, selfie flash, AI meme", @"section": @"Posting & Camera", @"unverified": @NO, @"note": @"Colored selfie flash is EXPERIMENTAL (PARTIAL — frontFlashColor is a real field, not a proven toggle). Configure it in its hub row."},
         @{@"num": @8, @"key": @"antiBurnInHideSystemBars", @"title": @"Anti-burn-in hides system bars (translucent, adjustable opacity)", @"section": @"Player", @"unverified": @NO},
         @{@"num": @9, @"key": @"redesignedModSettings", @"title": @"Redesigned mod settings (hub layout)", @"section": @"Mod", @"unverified": @NO},
         @{@"num": @10, @"key": @"downloadQualitySelection", @"title": @"Download quality selection (manual pick + skip-quality)", @"section": @"Downloads", @"unverified": @NO},
@@ -57,6 +57,7 @@ static const NSInteger kTMCustomBackgroundTag = 7008;
         @{@"num": @16, @"key": @"automaticStreaks", @"title": @"Automatic streaks — recipients + sticker, configurable timing", @"section": @"Chats & Comments", @"unverified": @NO},
         @{@"num": @17, @"key": @"sendPinLimitRemoval", @"title": @"Removed limits on sending videos + pinning chats", @"section": @"Chats & Comments", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
         @{@"num": @18, @"key": @"downloadWebSources", @"title": @"Downloads: web sources in source picker", @"section": @"Downloads", @"unverified": @NO},
+        @{@"num": @19, @"key": @"offlineVideoLimit", @"title": @"Offline video limit (tunes the offline fetch count)", @"section": @"Downloads", @"unverified": @NO, @"note": @"No iOS twin of Android's \"2,000\" exists — the count path is tuned instead (default 500, hub row)."},
         @{@"num": @20, @"key": @"appIconSelection", @"title": @"App icon selection (7 launcher styles)", @"section": @"Profile & Appearance", @"unverified": @NO, @"note": @"Icon sets must exist in the bundle at assembly time (TikTokMod/Icons/ + CFBundleAlternateIcons)."},
         @{@"num": @21, @"key": @"postDatesForYou", @"title": @"Post dates shown in the For You feed", @"section": @"Feed & Discovery", @"unverified": @NO},
         @{@"num": @22, @"key": @"contentFilters", @"title": @"Content filters — words, tags, likes, views", @"section": @"Feed & Discovery", @"unverified": @NO},
@@ -70,7 +71,7 @@ static const NSInteger kTMCustomBackgroundTag = 7008;
         @{@"num": @30, @"key": @"videoSliderSeekBar", @"title": @"Video slider / seek bar", @"section": @"Player", @"unverified": @NO},
         @{@"num": @31, @"key": @"autoScrollAutoPlayNext", @"title": @"Auto-scroll / auto-play \"autotease\" (+options/order)", @"section": @"Player", @"unverified": @NO},
         @{@"num": @32, @"key": @"customFonts", @"title": @"Custom fonts + system font", @"section": @"Profile & Appearance", @"unverified": @NO},
-        @{@"num": @33, @"key": @"customColorsTheming", @"title": @"Custom colors / theming", @"section": @"Profile & Appearance", @"unverified": @NO},
+        @{@"num": @33, @"key": @"customColorsTheming", @"title": @"Custom colors / theming", @"section": @"Profile & Appearance", @"unverified": @NO, @"note": @"Per-surface only (feed chrome first). A global theme engine is DEFER — no single choke point exists."},
         @{@"num": @34, @"key": @"hidePhotoMode", @"title": @"Hide photo mode", @"section": @"Feed & Discovery", @"unverified": @NO},
         @{@"num": @35, @"key": @"hideLiveEntries", @"title": @"Hide live entries + live badge", @"section": @"Feed & Discovery", @"unverified": @NO},
         @{@"num": @36, @"key": @"hideLikeViewCounts", @"title": @"Hide like / view counts", @"section": @"Feed & Discovery", @"unverified": @NO},
@@ -217,6 +218,48 @@ static const NSInteger kTMCustomBackgroundTag = 7008;
 - (nullable NSString *)modButtonCenter { return [self stringForKey:@"modButtonCenter"]; }
 - (void)setModButtonCenter:(nullable NSString *)value { [self setString:value forKey:@"modButtonCenter"]; }
 
+// --- V2 value keys (DYLIB-DESIGN.md §2.3) ---
+- (nullable NSArray<NSString *> *)streakRecipients { return [self arrayForKey:@"streakRecipients"]; }
+- (void)setStreakRecipients:(nullable NSArray<NSString *> *)value { [self setArray:value forKey:@"streakRecipients"]; }
+- (nullable NSString *)streakStickerID { return [self stringForKey:@"streakStickerID"]; }
+- (void)setStreakStickerID:(nullable NSString *)value { [self setString:value forKey:@"streakStickerID"]; }
+- (NSInteger)streakIntervalMinutes { return [self integerForKey:@"streakIntervalMinutes" defaultValue:60]; }
+- (void)setStreakIntervalMinutes:(NSInteger)value { [self setInteger:value forKey:@"streakIntervalMinutes"]; }
+- (nullable NSArray<NSString *> *)filterWords { return [self arrayForKey:@"filterWords"]; }
+- (void)setFilterWords:(nullable NSArray<NSString *> *)value { [self setArray:value forKey:@"filterWords"]; }
+- (nullable NSArray<NSString *> *)filterTags { return [self arrayForKey:@"filterTags"]; }
+- (void)setFilterTags:(nullable NSArray<NSString *> *)value { [self setArray:value forKey:@"filterTags"]; }
+- (NSInteger)filterMinLikes { return [self integerForKey:@"filterMinLikes" defaultValue:0]; }
+- (void)setFilterMinLikes:(NSInteger)value { [self setInteger:value forKey:@"filterMinLikes"]; }
+- (NSInteger)filterMinViews { return [self integerForKey:@"filterMinViews" defaultValue:0]; }
+- (void)setFilterMinViews:(NSInteger)value { [self setInteger:value forKey:@"filterMinViews"]; }
+- (NSInteger)offlineVideoCount { return [self integerForKey:@"offlineVideoCount" defaultValue:500]; }
+- (void)setOfflineVideoCount:(NSInteger)value { [self setInteger:value forKey:@"offlineVideoCount"]; }
+- (float)autoScrollDelaySeconds { return [self floatForKey:@"autoScrollDelaySeconds" defaultValue:1.0f]; }
+- (void)setAutoScrollDelaySeconds:(float)value { [self setFloat:value forKey:@"autoScrollDelaySeconds"]; }
+- (BOOL)autoScrollOnlyAfterFullWatch {
+    NSUserDefaults *d = [[self class] defaults];
+    if (![d objectForKey:@"autoScrollOnlyAfterFullWatch"]) return YES;
+    return [d boolForKey:@"autoScrollOnlyAfterFullWatch"];
+}
+- (void)setAutoScrollOnlyAfterFullWatch:(BOOL)value { [self setBool:value forKey:@"autoScrollOnlyAfterFullWatch"]; }
+- (nullable NSString *)customFontName {
+    NSString *name = [self stringForKey:@"customFontName"];
+    return name.length > 0 ? name : @"System";
+}
+- (void)setCustomFontName:(nullable NSString *)value { [self setString:value forKey:@"customFontName"]; }
+- (nullable NSString *)themeAccentColorHex { return [self stringForKey:@"themeAccentColorHex"]; }
+- (void)setThemeAccentColorHex:(nullable NSString *)value { [self setString:value forKey:@"themeAccentColorHex"]; }
+- (nullable NSString *)themeBackgroundColorHex { return [self stringForKey:@"themeBackgroundColorHex"]; }
+- (void)setThemeBackgroundColorHex:(nullable NSString *)value { [self setString:value forKey:@"themeBackgroundColorHex"]; }
+- (BOOL)coloredSelfieFlashEnabled { return [self boolForKey:@"coloredSelfieFlashEnabled"]; }
+- (void)setColoredSelfieFlashEnabled:(BOOL)value { [self setBool:value forKey:@"coloredSelfieFlashEnabled"]; }
+- (nullable NSString *)frontFlashColorHex {
+    NSString *hex = [self stringForKey:@"frontFlashColorHex"];
+    return hex.length > 0 ? hex : @"#FFFFFF";
+}
+- (void)setFrontFlashColorHex:(nullable NSString *)value { [self setString:value forKey:@"frontFlashColorHex"]; }
+
 - (BOOL)interfaceEditor { return [self boolForKey:@"interfaceEditor"]; }
 - (void)setInterfaceEditor:(BOOL)value { [self setBool:value forKey:@"interfaceEditor"]; }
 - (BOOL)playbackSpeed3x { return [self boolForKey:@"playbackSpeed3x"]; }
@@ -247,6 +290,8 @@ static const NSInteger kTMCustomBackgroundTag = 7008;
 - (void)setSendPinLimitRemoval:(BOOL)value { [self setBool:value forKey:@"sendPinLimitRemoval"]; }
 - (BOOL)downloadWebSources { return [self boolForKey:@"downloadWebSources"]; }
 - (void)setDownloadWebSources:(BOOL)value { [self setBool:value forKey:@"downloadWebSources"]; }
+- (BOOL)offlineVideoLimit { return [self boolForKey:@"offlineVideoLimit"]; }
+- (void)setOfflineVideoLimit:(BOOL)value { [self setBool:value forKey:@"offlineVideoLimit"]; }
 - (BOOL)appIconSelection { return [self boolForKey:@"appIconSelection"]; }
 - (void)setAppIconSelection:(BOOL)value { [self setBool:value forKey:@"appIconSelection"]; }
 - (BOOL)postDatesForYou { return [self boolForKey:@"postDatesForYou"]; }

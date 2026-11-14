@@ -3,11 +3,11 @@
 //  TikTokMod — toggle slot for every feature in the 44-feature list
 //  (TIKTOK-YOU-ANALYSIS.md, "COMPLETE FEATURE LIST — TikTok You 5.0").
 //
-//  Toggle count: 40. NOT toggles:
+//  Toggle count: 42. NOT toggles:
 //    #11 black-stories bugfix (Android-mod bugfix, not a portable feature),
-//    #12 hiding-rules maintenance note (re-verify hooks per TikTok update),
-//    #19 offline-video limit (Android-only cache tuning).
+//    #12 hiding-rules maintenance note (re-verify hooks per TikTok update).
 //  #15 OTA updates merges into #41 (mod hub + in-app updates).
+//  V2 added #19 (offline-video limit) — the registry line the design calls for.
 //
 //  EXTENSIBILITY: toggles are dictionary-backed, keyed by feature ID
 //  (see +allFeatures in TikTokModSettings.m). Adding a toggle later is
@@ -72,6 +72,36 @@ extern NSString * const TikTokModSettingsDidChangeNotification;
 /// #9 — persisted Mod-button position ("x,y") after the user drags it.
 @property (nonatomic, copy, nullable) NSString *modButtonCenter;
 
+// --- V2 value keys (DYLIB-DESIGN.md §2.3) ---
+/// #16 — conversation IDs that receive automatic streak invites (user-picked only).
+@property (nonatomic, copy, nullable) NSArray<NSString *> *streakRecipients;
+/// #16 — sticker ID sent with the streak invite (stored; the verified tracker
+/// selector has no sticker slot — see TikTokModV2.m for the honest limit).
+@property (nonatomic, copy, nullable) NSString *streakStickerID;
+/// #16 — minutes between automatic streak sends (default 60).
+@property (nonatomic, assign) NSInteger streakIntervalMinutes;
+/// #22 — words/tags that hide a feed item (caption + hashtags match).
+@property (nonatomic, copy, nullable) NSArray<NSString *> *filterWords;
+@property (nonatomic, copy, nullable) NSArray<NSString *> *filterTags;
+/// #22 — minimum likes / views a feed item must have to stay (default 0 = no floor).
+@property (nonatomic, assign) NSInteger filterMinLikes;
+@property (nonatomic, assign) NSInteger filterMinViews;
+/// #19 — offline fetch count (default 500). No iOS twin of Android's "2,000" exists.
+@property (nonatomic, assign) NSInteger offlineVideoCount;
+/// #31 — seconds to wait after a video ends before auto-scrolling (default 1).
+@property (nonatomic, assign) float autoScrollDelaySeconds;
+/// #31 — YES (default): advance only after a video fully plays to the end.
+@property (nonatomic, assign) BOOL autoScrollOnlyAfterFullWatch;
+/// #32 — PostScript font name, or @"System" (default) for the system font.
+@property (nonatomic, copy, nullable) NSString *customFontName;
+/// #33 — feed-chrome theme colors as hex (nil = stock). Per-surface only.
+@property (nonatomic, copy, nullable) NSString *themeAccentColorHex;
+@property (nonatomic, copy, nullable) NSString *themeBackgroundColorHex;
+/// #7 — experimental colored-selfie-flash sub-toggle (default OFF; PARTIAL).
+@property (nonatomic, assign) BOOL coloredSelfieFlashEnabled;
+/// #7 — flash color hex (default #FFFFFF).
+@property (nonatomic, copy, nullable) NSString *frontFlashColorHex;
+
 // --- #45 Custom Background (Mustafa's own request, not from TikTok You) ---
 // Toggle itself is the `customBackground` BOOL property (registry #45).
 // Mode: @"image" | @"color" | @"none". Image is stored as a JPEG file under
@@ -105,6 +135,7 @@ extern NSString * const TikTokModSettingsDidChangeNotification;
 @property (nonatomic, assign) BOOL automaticStreaks;  // #16 Automatic streaks — recipients + sticker, configurable timing
 @property (nonatomic, assign) BOOL sendPinLimitRemoval;  // #17 Removed limits on sending videos + pinning chats
 @property (nonatomic, assign) BOOL downloadWebSources;  // #18 Downloads: web sources in source picker
+@property (nonatomic, assign) BOOL offlineVideoLimit;  // #19 Offline video limit (V2: tunes the offline fetch count)
 @property (nonatomic, assign) BOOL appIconSelection;  // #20 App icon selection (7 launcher styles)
 @property (nonatomic, assign) BOOL postDatesForYou;  // #21 Post dates shown in the For You feed
 @property (nonatomic, assign) BOOL contentFilters;  // #22 Content filters — words, tags, likes, views
