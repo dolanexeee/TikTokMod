@@ -675,8 +675,100 @@ static void TM3InstallDownloadCapture(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Feature bodies — filled in per feature commit (C: #18, D: #24,
-// E: #25, F: #27). Until then each is a safe no-op that says so.
+// #18 Downloads: web sources in the source picker
+// Evidence is WEAK (R2: webSource ×4; R1: AWEMediaDownloadResultInnerItem
+// downloadSourceURL / setDownloadSourceURL:). No stock picker exists, so the
+// picker is dylib-built: paste a URL, or reuse the last source URL stock
+// itself set (recorded by the setter hook below). A pasted direct URL needs
+// no capture and works even if the pinning bypass is unproven (design §3
+// #18 fallback) — the bytes are fetched with a plain NSURLSession data task
+// (system trust) and written to Documents/TikTokMod/Downloads/. Nothing is
+// written into TikTok's own directories.
+// ---------------------------------------------------------------------------
+
+static IMP g3_orig_DownloadResult_setSourceURL = NULL;
+static BOOL g3_installed_DownloadResult = NO;
+
+static void TM3Hook_DownloadResult_setSourceURL(id self, SEL _cmd, id url) {
+    NSString *s = TM3StringOfURLValue(url);
+    if (s) {
+        g3_lastWebSourceURL = [s copy];
+        NSLog(@"[TikTokMod] #18 stock download source URL recorded (webSource evidence is weak — "
+              @"this is the URL stock itself set, offered as a picker entry)");
+    }
+    ((void (*)(id, SEL, id))g3_orig_DownloadResult_setSourceURL)(self, _cmd, url);
+}
+
+static void TM3InstallWebSources(void) {
+    if (!g3_installed_DownloadResult) {
+        g3_installed_DownloadResult = TM3InstallSite(@"AWEMediaDownloadResultInnerItem",
+            NSSelectorFromString(@"setDownloadSourceURL:"),
+            (IMP)TM3Hook_DownloadResult_setSourceURL, &g3_orig_DownloadResult_setSourceURL, NO, 'v');
+    }
+}
+
+/// Fetch URL bytes with a plain NSURLSession data task and write them to
+/// `directory/fileName`. Calls `completion` on the main thread with the
+/// saved path or an error string. Shared by #18 and #25.
+static void TM3FetchURLToFile(NSString *urlString, NSString *directory, NSString *fileName,
+                              void (^completion)(NSString * _Nullable savedPath, NSString * _Nullable error)) {
+    NSURL *url = [NSURL URLWithString:urlString];
+    if (!url) {
+        if (completion) completion(nil, @"Not a valid URL.");
+        return;
+    }
+    NSError *dirError = nil;
+    [[NSFileManager defaultManager] createDirectoryAtPath:directory withIntermediateDirectories:YES
+                                                attributes:nil error:&dirError];
+    if (dirError) {
+        if (completion) completion(nil, [NSString stringWithFormat:@"Could not create %@: %@", directory, dirError.localizedDescription]);
+        return;
+    }
+    NSString *path = [directory stringByAppendingPathComponent:fileName];
+    NSURLSession *session = [NSURLSession sharedSession];
+    NSURLSessionDataTask *task = [session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error || !data) {
+                if (completion) completion(nil, error ? error.localizedDescription : @"No data received.");
+                return;
+            }
+            if ([data writeToFile:path atomically:YES]) {
+                long status = [response isKindOfClass:[NSHTTPURLResponse class]]
+                    ? (long)[(NSHTTPURLResponse *)response statusCode] : -1;
+                NSLog(@"[TikTokMod] downloaded %lu bytes from %@ to %@ (HTTP %ld)",
+                      (unsigned long)data.length, urlString, path, status);
+                if (completion) completion(path, nil);
+            } else {
+                if (completion) completion(nil, @"Could not write the file.");
+            }
+        });
+    }];
+    [task resume];
+}
+
+static NSString *TM3DownloadsDirectory(void) {
+    NSArray<NSString *> *dirs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *base = dirs.firstObject ?: NSTemporaryDirectory();
+    return [base stringByAppendingPathComponent:@"TikTokMod/Downloads"];
+}
+
+static NSString *TM3FileNameForURLString(NSString *urlString, NSString *defaultExtension) {
+    NSURL *url = [NSURL URLWithString:urlString];
+    NSString *name = [url lastPathComponent];
+    if (name.length == 0 || [name isEqualToString:@"/"]) {
+        name = [NSString stringWithFormat:@"tiktok-%lld", (long long)[[NSDate date] timeIntervalSince1970]];
+    }
+    // Strip any query string that leaked into the name and ensure an extension.
+    name = [[name componentsSeparatedByString:@"?"] firstObject];
+    if ([name pathExtension].length == 0 && defaultExtension.length > 0) {
+        name = [name stringByAppendingPathExtension:defaultExtension];
+    }
+    return name;
+}
+
+// ---------------------------------------------------------------------------
+// Feature bodies — filled in per feature commit (D: #24, E: #25, F: #27).
+// Until then each is a safe no-op that says so.
 // ---------------------------------------------------------------------------
 
 static NSArray *g3_lastCapturedURLs = nil;
@@ -708,6 +800,7 @@ static NSString *g3_lastWebSourceURL = nil;
     // sites (added in commits B–F). Idempotent: installed sites are skipped.
     TM3InstallPinningBypass();
     TM3InstallDownloadCapture();
+    TM3InstallWebSources();
 }
 
 + (NSString *)pinningBypassStatus {
@@ -804,10 +897,56 @@ static NSString *g3_lastWebSourceURL = nil;
 }
 
 + (void)downloadFromWebSourceFromViewController:(UIViewController *)vc {
-    // Filled in commit C (#18).
-    (void)g3_lastWebSourceURL;
-    TM3AlertFrom(vc, @"Web sources (#18)",
-        @"Not implemented yet in this build — the web-source picker lands in the next commit.");
+    if (!TM3On(@"downloadWebSources")) {
+        TM3AlertFrom(vc, @"Web sources (#18)",
+            @"Turn the toggle on first. The webSource evidence is weak (4 hits) — this picker is dylib-built, and a pasted direct URL works even if the pinning bypass is unproven.");
+        return;
+    }
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Downloads: web sources (#18)"
+        message:@"Paste a direct video URL, or reuse the last source URL TikTok itself set. Files save to Documents/TikTokMod/Downloads/ (Files app). UNVERIFIED-RUNTIME."
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Paste a URL…" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+        UIAlertController *prompt = [UIAlertController alertControllerWithTitle:@"Download from URL (#18)"
+            message:@"Paste a direct http(s) video URL." preferredStyle:UIAlertControllerStyleAlert];
+        [prompt addTextFieldWithConfigurationHandler:^(UITextField *field) {
+            field.placeholder = @"https://…";
+            field.keyboardType = UIKeyboardTypeURL;
+            field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        }];
+        [prompt addAction:[UIAlertAction actionWithTitle:@"Download" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *done) {
+            NSString *urlString = [[prompt.textFields.firstObject.text ?: @""]
+                stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (![urlString hasPrefix:@"http://"] && ![urlString hasPrefix:@"https://"]) {
+                TM3AlertFrom(vc, @"Web sources (#18)", @"That is not an http(s) URL.");
+                return;
+            }
+            NSString *fileName = TM3FileNameForURLString(urlString, @"mp4");
+            TM3FetchURLToFile(urlString, TM3DownloadsDirectory(), fileName, ^(NSString *savedPath, NSString *error) {
+                if (savedPath) {
+                    TM3AlertFrom(vc, @"Web sources (#18)", [NSString stringWithFormat:@"Saved to %@.", savedPath]);
+                } else {
+                    TM3AlertFrom(vc, @"Web sources (#18)", [NSString stringWithFormat:@"Download failed: %@", error]);
+                }
+            });
+        }]];
+        [prompt addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [vc presentViewController:prompt animated:YES completion:nil];
+    }]];
+    if (g3_lastWebSourceURL.length > 0) {
+        NSString *last = g3_lastWebSourceURL;
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Use last stock source URL" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+            NSString *fileName = TM3FileNameForURLString(last, @"mp4");
+            TM3FetchURLToFile(last, TM3DownloadsDirectory(), fileName, ^(NSString *savedPath, NSString *error) {
+                if (savedPath) {
+                    TM3AlertFrom(vc, @"Web sources (#18)", [NSString stringWithFormat:@"Saved to %@.", savedPath]);
+                } else {
+                    TM3AlertFrom(vc, @"Web sources (#18)", [NSString stringWithFormat:@"Download failed: %@", error]);
+                }
+            });
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [vc presentViewController:sheet animated:YES completion:nil];
 }
 
 + (void)pickRegionFromViewController:(UIViewController *)vc {
