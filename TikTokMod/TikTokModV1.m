@@ -1235,6 +1235,23 @@ static BOOL g_v1InstalledStreakSwitch = NO;
 static BOOL g_v1InstalledSeriesTag = NO;
 static BOOL g_v1InstalledAppDelegate = NO;
 
+@implementation TikTokModV1
+
++ (nullable id)activePlayer { return g_activePlayer; }
+
++ (void)installV1Hooks {
+    // Generic dispatcher FIRST — it is also the retry trigger (§2.1).
+    [TikTokMod safeSwizzleClass:[TikTokMod safeClass:@"UIViewController"]
+               originalSelector:@selector(viewDidLoad)
+               swizzledSelector:@selector(tm_viewDidLoad)];
+    [self retryDeferredInstalls];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(tm_settingsChanged:)
+                                                 name:TikTokModSettingsDidChangeNotification
+                                               object:nil];
+    NSLog(@"[TikTokMod] V1 installHooks: dispatcher installed; per-site results in the logs above");
+}
+
 + (void)retryDeferredInstalls {
     if (!g_v1InstalledContainer) {
         g_v1InstalledContainer = TMInstallSite(@"AWEFeedContainerViewController",
