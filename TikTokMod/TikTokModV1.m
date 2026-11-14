@@ -10,6 +10,7 @@
 #import "TikTokMod.h"
 #import "TikTokModHub.h"
 #import "TikTokModSettings.h"
+#import <objc/message.h>
 #import <objc/runtime.h>
 
 NSString * const kTikTokModVersion = @"v1.0";
@@ -67,8 +68,6 @@ static BOOL TMClassNameContains(UIView *v, NSString *sub) {
 
 /// The most recently seen video player controller (weak). Set by the #2 hooks.
 static __weak id g_activePlayer = nil;
-
-+ (nullable id)activePlayer { return g_activePlayer; }
 
 static double TMDouble(id obj, SEL sel, double fallback) {
     if (!obj || !sel || ![obj respondsToSelector:sel]) return fallback;
@@ -918,6 +917,31 @@ static void TMShowHidePromptForView(UIView *hitView) {
 @end
 
 // ---------------------------------------------------------------------------
+// Forward declarations for TikTok classes (no headers exist for them).
+// Superclasses are the closest known UIKit type; only the category methods
+// below are ever called on these types. At runtime the real classes are
+// resolved with NSClassFromString, so a wrong superclass here cannot crash.
+// ---------------------------------------------------------------------------
+@interface AWEFeedRootViewController : UIViewController @end
+@interface AWEFeedContainerViewController : UIViewController @end
+@interface AWEFeedViewCell : UIView @end
+@interface AWEVideoPlayerController : NSObject @end
+@interface TTVideoEngine : NSObject @end
+@interface TTKMediaPiPController : NSObject @end
+@interface TTPictureInPictureController : NSObject @end
+@interface TTKFeedAppDiffComponent : NSObject @end
+@interface AWEIMModuleService : NSObject @end
+@interface TTKStory2FeedOverlayViewComponent : NSObject @end
+@interface AWEAwemeModel : NSObject @end
+@interface AWEListDataController : NSObject @end
+@interface TTKStandardProfileBannerContainer : UIView @end
+@interface TTKPhotoModeCommentEntranceView : UIView @end
+@interface AWEManagedStreakView : UIView @end
+@interface _TtC17TikTokIMImplSwift24AWEIMExtensionStreakInfo : NSObject @end
+@interface AWEFeedPaidContentPreviewTagView : UIView @end
+@interface AppDelegate : NSObject @end
+
+// ---------------------------------------------------------------------------
 // Swizzled implementations (categories on TikTok classes).
 // Each method reads its live toggle per call and falls through to stock when OFF.
 // ---------------------------------------------------------------------------
@@ -1342,6 +1366,8 @@ static BOOL g_v1InstalledSeriesTag = NO;
 static BOOL g_v1InstalledAppDelegate = NO;
 
 @implementation TikTokModV1
+
++ (nullable id)activePlayer { return g_activePlayer; }
 
 + (void)installV1Hooks {
     // Generic dispatcher FIRST — it is also the retry trigger (§2.1).
