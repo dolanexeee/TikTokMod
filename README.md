@@ -23,9 +23,18 @@ Native Objective-C dylib mod for decrypted **TikTok 47.7.0**
 
 ## Status
 
-Skeleton (B1): the dylib builds in CI, logs `TikTokMod loaded` on load,
-and presents the hub. **No real TikTok hooks yet** — toggles are stubs
-pending the class-map research (R1/R2).
+V1 (DYLIB-DESIGN.md §4, 24 features): implemented in `TikTokModV1.{h,m}` —
+hub entry (feed Mod button + Settings row), deferred-install retry,
+`+safeSwizzleClassMethod:`, the `TikTokModSettingsDidChangeNotification`,
+and per-feature hooks/overlays for #1, #2, #3, #4, #8, #9, #14 (banners
+only — layout half DEFERRED), #15/#41 OTA, #20 (7 icons, sets in
+`TikTokMod/Icons/`), #21, #28, #29, #30, #34, #35, #36, #37, #38, #39,
+#40, #42, #43 (hide only), #45 (profile/chat + feed chrome, video layer
+never translucent). Every hook is fail-soft and toggle-gated per call.
+
+**Honest limit: compile-verified only.** No iOS device exists on the build
+VM, so no hook is runtime-tested — test on a secondary account only.
+See `BUILD-LOG.md` in `~/workspace/projects/tiktok-mod/` for the verified CI run.
 
 ## Safety
 
