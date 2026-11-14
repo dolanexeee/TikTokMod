@@ -1373,7 +1373,7 @@ static void TM3InstallAdBlocking(void) {
         }];
         [prompt addAction:[UIAlertAction actionWithTitle:@"Download" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *done) {
             NSString *rawText = prompt.textFields.firstObject.text;
-            NSString *urlString = [[(rawText ? rawText : @"")
+            NSString *urlString = [(rawText ? rawText : @"")
                 stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             if (![urlString hasPrefix:@"http://"] && ![urlString hasPrefix:@"https://"]) {
                 TM3AlertFrom(vc, @"Web sources (#18)", @"That is not an http(s) URL.");
@@ -1429,7 +1429,7 @@ static void TM3InstallAdBlocking(void) {
         }];
         [prompt addAction:[UIAlertAction actionWithTitle:@"Apply" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *done) {
             NSString *rawCode = prompt.textFields.firstObject.text;
-            NSString *code = [[(rawCode ? rawCode : @"")
+            NSString *code = [(rawCode ? rawCode : @"")
                 stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]].uppercaseString;
             if (code.length != 2) {
                 TM3AlertFrom(vc, @"Region switching (#24)", @"Enter a 2-letter ISO country code.");
