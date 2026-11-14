@@ -1,0 +1,198 @@
+//
+//  TikTokModSettings.m
+//  Dictionary-backed toggles: every lookup goes through boolForKey: /
+//  setBool:forKey: against the NSUserDefaults suite. The hub reads
+//  +allFeatures, so a new toggle is one registry line.
+//
+#import "TikTokModSettings.h"
+
+static NSString * const kTikTokModSettingsSuite = @"com.tiktokmod.settings";
+
+@implementation TikTokModSettings
+
++ (instancetype)shared {
+    static TikTokModSettings *shared = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        shared = [[self alloc] init];
+    });
+    return shared;
+}
+
++ (NSUserDefaults *)defaults {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:kTikTokModSettingsSuite];
+    if (!defaults) {
+        NSLog(@"[TikTokMod] WARNING: could not open defaults suite %@, falling back to standardUserDefaults", kTikTokModSettingsSuite);
+        defaults = [NSUserDefaults standardUserDefaults];
+    }
+    return defaults;
+}
+
++ (NSArray<NSDictionary *> *)allFeatures {
+    static NSArray<NSDictionary *> *features = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        features = @[
+        @{@"num": @1, @"key": @"interfaceEditor", @"title": @"Interface editor — hide any element, one tap", @"section": @"Feed & Discovery", @"unverified": @NO},
+        @{@"num": @2, @"key": @"playbackSpeed3x", @"title": @"Playback speed picker up to 3x (persists)", @"section": @"Player", @"unverified": @NO},
+        @{@"num": @3, @"key": @"pictureInPicture", @"title": @"Picture-in-picture mode", @"section": @"Player", @"unverified": @NO},
+        @{@"num": @4, @"key": @"readAllChats", @"title": @""Read all" button when selecting chats", @"section": @"Chats & Comments", @"unverified": @NO},
+        @{@"num": @5, @"key": @"comments9Images", @"title": @"Comments with up to 9 images", @"section": @"Chats & Comments", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
+        @{@"num": @6, @"key": @"hashtagLimitRemoval", @"title": @"Removed hashtag limit when posting", @"section": @"Posting & Camera", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
+        @{@"num": @7, @"key": @"cameraExtras", @"title": @"Camera extras: teleprompter, green screen, selfie flash, AI meme", @"section": @"Posting & Camera", @"unverified": @NO},
+        @{@"num": @8, @"key": @"antiBurnInHideSystemBars", @"title": @"Anti-burn-in hides system bars (translucent, adjustable opacity)", @"section": @"Player", @"unverified": @NO},
+        @{@"num": @9, @"key": @"redesignedModSettings", @"title": @"Redesigned mod settings (hub layout)", @"section": @"Mod", @"unverified": @NO},
+        @{@"num": @10, @"key": @"downloadQualitySelection", @"title": @"Download quality selection (manual pick + skip-quality)", @"section": @"Downloads", @"unverified": @NO},
+        @{@"num": @13, @"key": @"commentReposts", @"title": @"Comment reposts", @"section": @"Chats & Comments", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
+        @{@"num": @14, @"key": @"bannersNewProfileLayout", @"title": @"Banners + new profile layout unlocked", @"section": @"Profile & Appearance", @"unverified": @NO},
+        @{@"num": @16, @"key": @"automaticStreaks", @"title": @"Automatic streaks — recipients + sticker, configurable timing", @"section": @"Chats & Comments", @"unverified": @NO},
+        @{@"num": @17, @"key": @"sendPinLimitRemoval", @"title": @"Removed limits on sending videos + pinning chats", @"section": @"Chats & Comments", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
+        @{@"num": @18, @"key": @"downloadWebSources", @"title": @"Downloads: web sources in source picker", @"section": @"Downloads", @"unverified": @NO},
+        @{@"num": @20, @"key": @"appIconSelection", @"title": @"App icon selection (7 launcher styles)", @"section": @"Profile & Appearance", @"unverified": @NO},
+        @{@"num": @21, @"key": @"postDatesForYou", @"title": @"Post dates shown in the For You feed", @"section": @"Feed & Discovery", @"unverified": @NO},
+        @{@"num": @22, @"key": @"contentFilters", @"title": @"Content filters — words, tags, likes, views", @"section": @"Feed & Discovery", @"unverified": @NO},
+        @{@"num": @23, @"key": @"stickerDownloads", @"title": @"Sticker downloads", @"section": @"Downloads", @"unverified": @NO},
+        @{@"num": @24, @"key": @"regionSwitching", @"title": @"Region switching (268 flags)", @"section": @"Feed & Discovery", @"unverified": @NO},
+        @{@"num": @25, @"key": @"audioOnlyDownload", @"title": @"Audio-only download (to Music/TikTok)", @"section": @"Downloads", @"unverified": @NO},
+        @{@"num": @26, @"key": @"repostCharacterLimitRemoval", @"title": @"Removed character limit on reposts", @"section": @"Posting & Camera", @"unverified": @YES, @"note": @"UNVERIFIED — server may still enforce"},
+        @{@"num": @27, @"key": @"adBlocking", @"title": @"Ad blocking / clean feed", @"section": @"Feed & Discovery", @"unverified": @NO},
+        @{@"num": @28, @"key": @"hideStory", @"title": @"Hide story", @"section": @"Player", @"unverified": @NO},
+        @{@"num": @29, @"key": @"hideUIOpacity", @"title": @"Hide UI with opacity control", @"section": @"Player", @"unverified": @NO},
+        @{@"num": @30, @"key": @"videoSliderSeekBar", @"title": @"Video slider / seek bar", @"section": @"Player", @"unverified": @NO},
+        @{@"num": @31, @"key": @"autoScrollAutoPlayNext", @"title": @"Auto-scroll / auto-play "autotease" (+options/order)", @"section": @"Player", @"unverified": @NO},
+        @{@"num": @32, @"key": @"customFonts", @"title": @"Custom fonts + system font", @"section": @"Profile & Appearance", @"unverified": @NO},
+        @{@"num": @33, @"key": @"customColorsTheming", @"title": @"Custom colors / theming", @"section": @"Profile & Appearance", @"unverified": @NO},
+        @{@"num": @34, @"key": @"hidePhotoMode", @"title": @"Hide photo mode", @"section": @"Feed & Discovery", @"unverified": @NO},
+        @{@"num": @35, @"key": @"hideLiveEntries", @"title": @"Hide live entries + live badge", @"section": @"Feed & Discovery", @"unverified": @NO},
+        @{@"num": @36, @"key": @"hideLikeViewCounts", @"title": @"Hide like / view counts", @"section": @"Feed & Discovery", @"unverified": @NO},
+        @{@"num": @37, @"key": @"hideStreakBadges", @"title": @"Hide streak badges", @"section": @"Feed & Discovery", @"unverified": @NO},
+        @{@"num": @38, @"key": @"drawingTool", @"title": @"Drawing tool "risovalca"", @"section": @"Player", @"unverified": @NO},
+        @{@"num": @39, @"key": @"fakeStatusBarPreview", @"title": @"Fake status-bar preview (battery / signal / wifi)", @"section": @"Player", @"unverified": @NO},
+        @{@"num": @40, @"key": @"startupScreen", @"title": @"Startup screen: check, download, FAQ, legal, stats", @"section": @"Mod", @"unverified": @NO},
+        @{@"num": @41, @"key": @"modHubInAppUpdates", @"title": @"Mod hub / settings + in-app mod updates (OTA, incl. #15)", @"section": @"Mod", @"unverified": @NO},
+        @{@"num": @42, @"key": @"telegramCommunityLink", @"title": @"Telegram community link", @"section": @"Mod", @"unverified": @NO},
+        @{@"num": @43, @"key": @"hideSeriesRows", @"title": @"Hide Series rows — HIDE ONLY, never unlock", @"section": @"Feed & Discovery", @"unverified": @NO},
+        @{@"num": @44, @"key": @"watermarkFreeDownloads", @"title": @"Watermark-free downloads", @"section": @"Downloads", @"unverified": @YES, @"note": @"NOT VERIFIED from code — do not claim unless proven"}
+        ];
+    });
+    return features;
+}
+
++ (NSArray<NSString *> *)allFeatureKeys {
+    NSMutableArray<NSString *> *keys = [NSMutableArray array];
+    for (NSDictionary *f in [self allFeatures]) {
+        [keys addObject:f[@"key"]];
+    }
+    return [keys copy];
+}
+
++ (nullable NSDictionary *)featureForKey:(NSString *)key {
+    for (NSDictionary *f in [self allFeatures]) {
+        if ([f[@"key"] isEqualToString:key]) return f;
+    }
+    return nil;
+}
+
++ (NSArray<NSString *> *)sections {
+    NSMutableArray<NSString *> *sections = [NSMutableArray array];
+    for (NSDictionary *f in [self allFeatures]) {
+        NSString *section = f[@"section"];
+        if (![sections containsObject:section]) [sections addObject:section];
+    }
+    return [sections copy];
+}
+
+- (BOOL)boolForKey:(NSString *)key {
+    if (!key) return NO;
+    return [[[self class] defaults] boolForKey:key];
+}
+
+- (void)setBool:(BOOL)value forKey:(NSString *)key {
+    if (!key) return;
+    NSUserDefaults *defaults = [[self class] defaults];
+    [defaults setBool:value forKey:key];
+    [defaults synchronize];
+}
+
+- (BOOL)interfaceEditor { return [self boolForKey:@"interfaceEditor"]; }
+- (void)setInterfaceEditor:(BOOL)value { [self setBool:value forKey:@"interfaceEditor"]; }
+- (BOOL)playbackSpeed3x { return [self boolForKey:@"playbackSpeed3x"]; }
+- (void)setPlaybackSpeed3x:(BOOL)value { [self setBool:value forKey:@"playbackSpeed3x"]; }
+- (BOOL)pictureInPicture { return [self boolForKey:@"pictureInPicture"]; }
+- (void)setPictureInPicture:(BOOL)value { [self setBool:value forKey:@"pictureInPicture"]; }
+- (BOOL)readAllChats { return [self boolForKey:@"readAllChats"]; }
+- (void)setReadAllChats:(BOOL)value { [self setBool:value forKey:@"readAllChats"]; }
+- (BOOL)comments9Images { return [self boolForKey:@"comments9Images"]; }
+- (void)setComments9Images:(BOOL)value { [self setBool:value forKey:@"comments9Images"]; }
+- (BOOL)hashtagLimitRemoval { return [self boolForKey:@"hashtagLimitRemoval"]; }
+- (void)setHashtagLimitRemoval:(BOOL)value { [self setBool:value forKey:@"hashtagLimitRemoval"]; }
+- (BOOL)cameraExtras { return [self boolForKey:@"cameraExtras"]; }
+- (void)setCameraExtras:(BOOL)value { [self setBool:value forKey:@"cameraExtras"]; }
+- (BOOL)antiBurnInHideSystemBars { return [self boolForKey:@"antiBurnInHideSystemBars"]; }
+- (void)setAntiBurnInHideSystemBars:(BOOL)value { [self setBool:value forKey:@"antiBurnInHideSystemBars"]; }
+- (BOOL)redesignedModSettings { return [self boolForKey:@"redesignedModSettings"]; }
+- (void)setRedesignedModSettings:(BOOL)value { [self setBool:value forKey:@"redesignedModSettings"]; }
+- (BOOL)downloadQualitySelection { return [self boolForKey:@"downloadQualitySelection"]; }
+- (void)setDownloadQualitySelection:(BOOL)value { [self setBool:value forKey:@"downloadQualitySelection"]; }
+- (BOOL)commentReposts { return [self boolForKey:@"commentReposts"]; }
+- (void)setCommentReposts:(BOOL)value { [self setBool:value forKey:@"commentReposts"]; }
+- (BOOL)bannersNewProfileLayout { return [self boolForKey:@"bannersNewProfileLayout"]; }
+- (void)setBannersNewProfileLayout:(BOOL)value { [self setBool:value forKey:@"bannersNewProfileLayout"]; }
+- (BOOL)automaticStreaks { return [self boolForKey:@"automaticStreaks"]; }
+- (void)setAutomaticStreaks:(BOOL)value { [self setBool:value forKey:@"automaticStreaks"]; }
+- (BOOL)sendPinLimitRemoval { return [self boolForKey:@"sendPinLimitRemoval"]; }
+- (void)setSendPinLimitRemoval:(BOOL)value { [self setBool:value forKey:@"sendPinLimitRemoval"]; }
+- (BOOL)downloadWebSources { return [self boolForKey:@"downloadWebSources"]; }
+- (void)setDownloadWebSources:(BOOL)value { [self setBool:value forKey:@"downloadWebSources"]; }
+- (BOOL)appIconSelection { return [self boolForKey:@"appIconSelection"]; }
+- (void)setAppIconSelection:(BOOL)value { [self setBool:value forKey:@"appIconSelection"]; }
+- (BOOL)postDatesForYou { return [self boolForKey:@"postDatesForYou"]; }
+- (void)setPostDatesForYou:(BOOL)value { [self setBool:value forKey:@"postDatesForYou"]; }
+- (BOOL)contentFilters { return [self boolForKey:@"contentFilters"]; }
+- (void)setContentFilters:(BOOL)value { [self setBool:value forKey:@"contentFilters"]; }
+- (BOOL)stickerDownloads { return [self boolForKey:@"stickerDownloads"]; }
+- (void)setStickerDownloads:(BOOL)value { [self setBool:value forKey:@"stickerDownloads"]; }
+- (BOOL)regionSwitching { return [self boolForKey:@"regionSwitching"]; }
+- (void)setRegionSwitching:(BOOL)value { [self setBool:value forKey:@"regionSwitching"]; }
+- (BOOL)audioOnlyDownload { return [self boolForKey:@"audioOnlyDownload"]; }
+- (void)setAudioOnlyDownload:(BOOL)value { [self setBool:value forKey:@"audioOnlyDownload"]; }
+- (BOOL)repostCharacterLimitRemoval { return [self boolForKey:@"repostCharacterLimitRemoval"]; }
+- (void)setRepostCharacterLimitRemoval:(BOOL)value { [self setBool:value forKey:@"repostCharacterLimitRemoval"]; }
+- (BOOL)adBlocking { return [self boolForKey:@"adBlocking"]; }
+- (void)setAdBlocking:(BOOL)value { [self setBool:value forKey:@"adBlocking"]; }
+- (BOOL)hideStory { return [self boolForKey:@"hideStory"]; }
+- (void)setHideStory:(BOOL)value { [self setBool:value forKey:@"hideStory"]; }
+- (BOOL)hideUIOpacity { return [self boolForKey:@"hideUIOpacity"]; }
+- (void)setHideUIOpacity:(BOOL)value { [self setBool:value forKey:@"hideUIOpacity"]; }
+- (BOOL)videoSliderSeekBar { return [self boolForKey:@"videoSliderSeekBar"]; }
+- (void)setVideoSliderSeekBar:(BOOL)value { [self setBool:value forKey:@"videoSliderSeekBar"]; }
+- (BOOL)autoScrollAutoPlayNext { return [self boolForKey:@"autoScrollAutoPlayNext"]; }
+- (void)setAutoScrollAutoPlayNext:(BOOL)value { [self setBool:value forKey:@"autoScrollAutoPlayNext"]; }
+- (BOOL)customFonts { return [self boolForKey:@"customFonts"]; }
+- (void)setCustomFonts:(BOOL)value { [self setBool:value forKey:@"customFonts"]; }
+- (BOOL)customColorsTheming { return [self boolForKey:@"customColorsTheming"]; }
+- (void)setCustomColorsTheming:(BOOL)value { [self setBool:value forKey:@"customColorsTheming"]; }
+- (BOOL)hidePhotoMode { return [self boolForKey:@"hidePhotoMode"]; }
+- (void)setHidePhotoMode:(BOOL)value { [self setBool:value forKey:@"hidePhotoMode"]; }
+- (BOOL)hideLiveEntries { return [self boolForKey:@"hideLiveEntries"]; }
+- (void)setHideLiveEntries:(BOOL)value { [self setBool:value forKey:@"hideLiveEntries"]; }
+- (BOOL)hideLikeViewCounts { return [self boolForKey:@"hideLikeViewCounts"]; }
+- (void)setHideLikeViewCounts:(BOOL)value { [self setBool:value forKey:@"hideLikeViewCounts"]; }
+- (BOOL)hideStreakBadges { return [self boolForKey:@"hideStreakBadges"]; }
+- (void)setHideStreakBadges:(BOOL)value { [self setBool:value forKey:@"hideStreakBadges"]; }
+- (BOOL)drawingTool { return [self boolForKey:@"drawingTool"]; }
+- (void)setDrawingTool:(BOOL)value { [self setBool:value forKey:@"drawingTool"]; }
+- (BOOL)fakeStatusBarPreview { return [self boolForKey:@"fakeStatusBarPreview"]; }
+- (void)setFakeStatusBarPreview:(BOOL)value { [self setBool:value forKey:@"fakeStatusBarPreview"]; }
+- (BOOL)startupScreen { return [self boolForKey:@"startupScreen"]; }
+- (void)setStartupScreen:(BOOL)value { [self setBool:value forKey:@"startupScreen"]; }
+- (BOOL)modHubInAppUpdates { return [self boolForKey:@"modHubInAppUpdates"]; }
+- (void)setModHubInAppUpdates:(BOOL)value { [self setBool:value forKey:@"modHubInAppUpdates"]; }
+- (BOOL)telegramCommunityLink { return [self boolForKey:@"telegramCommunityLink"]; }
+- (void)setTelegramCommunityLink:(BOOL)value { [self setBool:value forKey:@"telegramCommunityLink"]; }
+- (BOOL)hideSeriesRows { return [self boolForKey:@"hideSeriesRows"]; }
+- (void)setHideSeriesRows:(BOOL)value { [self setBool:value forKey:@"hideSeriesRows"]; }
+- (BOOL)watermarkFreeDownloads { return [self boolForKey:@"watermarkFreeDownloads"]; }
+- (void)setWatermarkFreeDownloads:(BOOL)value { [self setBool:value forKey:@"watermarkFreeDownloads"]; }
+
+@end

@@ -1,0 +1,246 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		4528D7772DF4A8732463B57C /* TikTokMod.m in Sources */ = {isa = PBXBuildFile; fileRef = 75A7C52F2D8053346D5D9740 /* TikTokMod.m */; };
+		FA134098F911EAB13D393606 /* TikTokModSettings.m in Sources */ = {isa = PBXBuildFile; fileRef = 3A4E59F70FC560F09418B910 /* TikTokModSettings.m */; };
+		7AAE468C04EC9480128CCE16 /* TikTokModHub.m in Sources */ = {isa = PBXBuildFile; fileRef = 435DFD95A58DCEE9A1375799 /* TikTokModHub.m */; };
+		B99A213C11C777E0E7D59583 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2FF68A975D52E3BFDB402D17 /* UIKit.framework */; };
+		C21F7AED084AC1E7166BE148 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4629FD99B9E2F5A277DDBF02 /* Foundation.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		75A7C52F2D8053346D5D9740 /* TikTokMod.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TikTokMod.m; sourceTree = "<group>"; };
+		1D3B2D70E64BD114A6FA975D /* TikTokMod.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TikTokMod.h; sourceTree = "<group>"; };
+		3A4E59F70FC560F09418B910 /* TikTokModSettings.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TikTokModSettings.m; sourceTree = "<group>"; };
+		A9F331A6ABA7330435C3C66E /* TikTokModSettings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TikTokModSettings.h; sourceTree = "<group>"; };
+		435DFD95A58DCEE9A1375799 /* TikTokModHub.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TikTokModHub.m; sourceTree = "<group>"; };
+		225775B4FCA0AFED976A5B4C /* TikTokModHub.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TikTokModHub.h; sourceTree = "<group>"; };
+		A8792157CB4F27FB949C035F /* TikTokMod.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = TikTokMod.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
+		2FF68A975D52E3BFDB402D17 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		4629FD99B9E2F5A277DDBF02 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0B0EAC1C67A2F2EB9E6EB6F7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B99A213C11C777E0E7D59583 /* UIKit.framework in Frameworks */,
+				C21F7AED084AC1E7166BE148 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AA0596BBDB4DCC95D5D4F10C = {
+			isa = PBXGroup;
+			children = (
+				6AB87BDD7349A09E2AE65F85 /* TikTokMod */,
+				6F7199ED7B63CDA338A0FB82 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		6AB87BDD7349A09E2AE65F85 /* TikTokMod */ = {
+			isa = PBXGroup;
+			children = (
+				75A7C52F2D8053346D5D9740 /* TikTokMod.m */,
+				1D3B2D70E64BD114A6FA975D /* TikTokMod.h */,
+				3A4E59F70FC560F09418B910 /* TikTokModSettings.m */,
+				A9F331A6ABA7330435C3C66E /* TikTokModSettings.h */,
+				435DFD95A58DCEE9A1375799 /* TikTokModHub.m */,
+				225775B4FCA0AFED976A5B4C /* TikTokModHub.h */,
+			);
+			path = TikTokMod;
+			sourceTree = "<group>";
+		};
+		6F7199ED7B63CDA338A0FB82 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A8792157CB4F27FB949C035F /* TikTokMod.dylib */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		34A04005BCAF206EEC990BD9 /* TikTokMod */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EA761691A51ACBE657F2A897 /* Build configuration list for PBXNativeTarget "TikTokMod" */;
+			buildPhases = (
+				9261F04E014268C1FB6C1C5E /* Sources */,
+				0B0EAC1C67A2F2EB9E6EB6F7 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TikTokMod;
+			productName = TikTokMod;
+			productReference = A8792157CB4F27FB949C035F /* TikTokMod.dylib */;
+			productType = "com.apple.product-type.library.dynamic";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		244210E48437B6556980A702 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					34A04005BCAF206EEC990BD9 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = 88651694C9EF2D25BD8E75A6 /* Build configuration list for PBXProject "TikTokMod" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA0596BBDB4DCC95D5D4F10C;
+			productRefGroup = 6F7199ED7B63CDA338A0FB82 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				34A04005BCAF206EEC990BD9 /* TikTokMod */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9261F04E014268C1FB6C1C5E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			4528D7772DF4A8732463B57C /* TikTokMod.m in Sources */,
+			FA134098F911EAB13D393606 /* TikTokModSettings.m in Sources */,
+			7AAE468C04EC9480128CCE16 /* TikTokModHub.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1C9FDA849B6AD8E4A706194E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+			};
+			name = Debug;
+		};
+		26D9D48DC73579A75B561D56 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+			};
+			name = Release;
+		};
+		EE335F9BD7EB2AED8E098696 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_IDENTITY = "";
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				DEFINES_MODULE = NO;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				EXECUTABLE_PREFIX = "";
+				GENERATE_MASTER_OBJECT_FILE = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACH_O_TYPE = mh_dylib;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tiktokmod.dylib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = Debug;
+		};
+		FBE7EFC753BC975243F818E0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_IDENTITY = "";
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				DEFINES_MODULE = NO;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				EXECUTABLE_PREFIX = "";
+				GENERATE_MASTER_OBJECT_FILE = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACH_O_TYPE = mh_dylib;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tiktokmod.dylib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		88651694C9EF2D25BD8E75A6 /* Build configuration list for PBXProject "TikTokMod" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1C9FDA849B6AD8E4A706194E /* Debug */,
+				26D9D48DC73579A75B561D56 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		EA761691A51ACBE657F2A897 /* Build configuration list for PBXNativeTarget "TikTokMod" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE335F9BD7EB2AED8E098696 /* Debug */,
+				FBE7EFC753BC975243F818E0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 244210E48437B6556980A702 /* Project object */;
+}

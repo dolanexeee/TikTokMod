@@ -1,0 +1,44 @@
+name: Build TikTokMod dylib
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-dylib:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer || xcodebuild -version
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build TikTokMod.dylib
+        run: |
+          xcodebuild build \
+            -project TikTokMod.xcodeproj \
+            -target TikTokMod \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY= \
+            CODE_SIGNING_REQUIRED=NO \
+            -derivedDataPath build
+
+      - name: List built product
+        run: |
+          ls -la build/Build/Products/Release-iphoneos/
+          file build/Build/Products/Release-iphoneos/TikTokMod.dylib
+          shasum -a 256 build/Build/Products/Release-iphoneos/TikTokMod.dylib
+
+      - name: Upload TikTokMod.dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: TikTokMod.dylib
+          path: build/Build/Products/Release-iphoneos/TikTokMod.dylib
+          if-no-files-found: error
