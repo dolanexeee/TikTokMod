@@ -3,11 +3,14 @@
 Native Objective-C dylib mod for decrypted **TikTok 47.7.0**
 (bundle `com.zhiliaoapp.musically`, arm64).
 
-- One dylib, one in-app settings hub (`TikTokModHub`), 40 feature toggles (44-feature list)
+- One dylib, one in-app settings hub (`TikTokModHub`), 41 feature toggles (45-feature list)
   (`TikTokModSettings`, persisted in NSUserDefaults suite
   `com.tiktokmod.settings`).
 - Toggles are dictionary-backed and keyed by feature ID: adding one is a
   single line in the `+allFeatures` registry in `TikTokModSettings.m`.
+- #45 Custom Background (his own request): toggle + picker row in the hub —
+  image via UIImagePickerController (stored as JPEG under Documents/TikTokMod/)
+  or color as a hex string; overlay application is a stub until research lands.
 - NOT toggles: #11 (Android bugfix), #12 (maintenance note), #19
   (Android-only offline limit); #15 OTA updates merges into #41.
 - Server-side-caution toggles (comment reposts, 9-image comments, hashtag

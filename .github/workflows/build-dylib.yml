@@ -22,7 +22,7 @@ jobs:
         run: |
           xcodebuild build \
             -project TikTokMod.xcodeproj \
-            -target TikTokMod \
+            -scheme TikTokMod \
             -configuration Release \
             -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO \

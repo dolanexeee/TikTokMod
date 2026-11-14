@@ -8,10 +8,13 @@
 #import "TikTokModHub.h"
 #import "TikTokModSettings.h"
 
-@interface TikTokModHub ()
+@interface TikTokModHub () <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
 @property (nonatomic, strong) NSArray<NSString *> *sections;
 @property (nonatomic, strong) NSDictionary<NSString *, NSArray<NSDictionary *> *> *featuresBySection;
 @end
+
+// Extra picker row appended to the "Profile & Appearance" section (#45).
+static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance";
 
 @implementation TikTokModHub
 
@@ -76,8 +79,15 @@
     return self.sections[(NSUInteger)section];
 }
 
+- (BOOL)isCustomBackgroundPickerRow:(NSIndexPath *)indexPath {
+    return [self.sections[(NSUInteger)indexPath.section] isEqualToString:kCustomBackgroundPickerSection]
+        && indexPath.row == (NSInteger)self.featuresBySection[kCustomBackgroundPickerSection].count;
+}
+
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return (NSInteger)self.featuresBySection[self.sections[(NSUInteger)section]].count;
+    NSInteger count = (NSInteger)self.featuresBySection[self.sections[(NSUInteger)section]].count;
+    if ([self.sections[(NSUInteger)section] isEqualToString:kCustomBackgroundPickerSection]) count += 1;  // #45 picker row
+    return count;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
@@ -95,6 +105,30 @@
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:CellID];
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    }
+    if ([self isCustomBackgroundPickerRow:indexPath]) {
+        // #45 picker row: tap to choose an image or a color.
+        TikTokModSettings *settings = [TikTokModSettings shared];
+        UITableViewCell *pickerCell = [tableView dequeueReusableCellWithIdentifier:CellID];
+        if (!pickerCell) {
+            pickerCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:CellID];
+        }
+        pickerCell.textLabel.text = @"Custom background: pick image or color";
+        pickerCell.textLabel.numberOfLines = 0;
+        pickerCell.textLabel.font = [UIFont systemFontOfSize:15];
+        NSString *mode = settings.customBackgroundMode;
+        if ([mode isEqualToString:@"image"]) {
+            pickerCell.detailTextLabel.text = @"Image set — tap to change";
+        } else if ([mode isEqualToString:@"color"]) {
+            pickerCell.detailTextLabel.text = [NSString stringWithFormat:@"Color %@ — tap to change", settings.customBackgroundColorHex ?: @"?"];
+        } else {
+            pickerCell.detailTextLabel.text = @"No background set — tap to pick";
+        }
+        pickerCell.detailTextLabel.numberOfLines = 0;
+        pickerCell.detailTextLabel.font = [UIFont systemFontOfSize:12];
+        pickerCell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        pickerCell.accessoryView = nil;
+        return pickerCell;
     }
     NSDictionary *feature = self.featuresBySection[self.sections[(NSUInteger)indexPath.section]][(NSUInteger)indexPath.row];
     NSString *key = feature[@"key"];
@@ -119,6 +153,92 @@
     if (!key) return;
     [[TikTokModSettings shared] setBool:sender.isOn forKey:key];
     NSLog(@"[TikTokMod] toggle %@ = %@", key, sender.isOn ? @"ON" : @"OFF");
+}
+
+#pragma mark - #45 Custom Background picker
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if ([self isCustomBackgroundPickerRow:indexPath]) {
+        [self presentBackgroundChooser];
+    }
+}
+
+- (void)presentBackgroundChooser {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Custom background"
+                                                                   message:@"Pick an image from your photo library, or choose a color. Applied later as an overlay behind the feed."
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Pick image from library" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+        [self presentImagePicker];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Choose a color" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+        [self presentColorChoices];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Clear background" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *a) {
+        [[TikTokModSettings shared] clearCustomBackgroundImage];
+        [self.tableView reloadData];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.view;
+    sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentImagePicker {
+    if (![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+        NSLog(@"[TikTokMod] image picker: photo library unavailable (fail-soft)");
+        return;
+    }
+    UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    picker.delegate = self;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)presentColorChoices {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Background color"
+                                                                   message:nil
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSArray<NSString *> *> *choices = @[
+        @[@"Black", @"#000000"], @[@"White", @"#FFFFFF"],
+        @[@"Dark blue", @"#1A1A2E"], @[@"Dark purple", @"#2D1B4E"],
+        @[@"Dark green", @"#0F2E1F"], @[@"Dark red", @"#3A0D0D"],
+    ];
+    for (NSArray<NSString *> *choice in choices) {
+        NSString *name = choice[0];
+        NSString *hex = choice[1];
+        [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@ (%@)", name, hex]
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *a) {
+            TikTokModSettings *settings = [TikTokModSettings shared];
+            settings.customBackgroundColorHex = hex;
+            settings.customBackgroundMode = @"color";
+            NSLog(@"[TikTokMod] custom background color set: %@", hex);
+            [self.tableView reloadData];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.view;
+    sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+#pragma mark - UIImagePickerControllerDelegate
+
+- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey, id> *)info {
+    UIImage *image = info[UIImagePickerControllerOriginalImage];
+    [picker dismissViewControllerAnimated:YES completion:^{
+        if (image) {
+            [[TikTokModSettings shared] saveCustomBackgroundImage:image];
+        } else {
+            NSLog(@"[TikTokMod] image picker: no image returned (fail-soft)");
+        }
+        [self.tableView reloadData];
+    }];
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:nil];
 }
 
 @end

@@ -72,7 +72,8 @@ static NSString * const kTikTokModSettingsSuite = @"com.tiktokmod.settings";
         @{@"num": @41, @"key": @"modHubInAppUpdates", @"title": @"Mod hub / settings + in-app mod updates (OTA, incl. #15)", @"section": @"Mod", @"unverified": @NO},
         @{@"num": @42, @"key": @"telegramCommunityLink", @"title": @"Telegram community link", @"section": @"Mod", @"unverified": @NO},
         @{@"num": @43, @"key": @"hideSeriesRows", @"title": @"Hide Series rows — HIDE ONLY, never unlock", @"section": @"Feed & Discovery", @"unverified": @NO},
-        @{@"num": @44, @"key": @"watermarkFreeDownloads", @"title": @"Watermark-free downloads", @"section": @"Downloads", @"unverified": @YES, @"note": @"NOT VERIFIED from code — do not claim unless proven"}
+        @{@"num": @44, @"key": @"watermarkFreeDownloads", @"title": @"Watermark-free downloads", @"section": @"Downloads", @"unverified": @YES, @"note": @"NOT VERIFIED from code — do not claim unless proven"},
+        @{@"num": @45, @"key": @"customBackground", @"title": @"Custom background — image or color (feed / profile / chat)", @"section": @"Profile & Appearance", @"unverified": @NO, @"note": @"Mustafa's own request (#45) — pick image or color in the hub"}
         ];
     });
     return features;
@@ -194,5 +195,121 @@ static NSString * const kTikTokModSettingsSuite = @"com.tiktokmod.settings";
 - (void)setHideSeriesRows:(BOOL)value { [self setBool:value forKey:@"hideSeriesRows"]; }
 - (BOOL)watermarkFreeDownloads { return [self boolForKey:@"watermarkFreeDownloads"]; }
 - (void)setWatermarkFreeDownloads:(BOOL)value { [self setBool:value forKey:@"watermarkFreeDownloads"]; }
+- (BOOL)customBackground { return [self boolForKey:@"customBackground"]; }
+- (void)setCustomBackground:(BOOL)value { [self setBool:value forKey:@"customBackground"]; }
+
+#pragma mark - #45 Custom Background
+
+- (NSString *)customBackgroundMode {
+    NSString *mode = [[[self class] defaults] stringForKey:@"customBackgroundMode"];
+    if (!mode || (![mode isEqualToString:@"image"] && ![mode isEqualToString:@"color"])) return @"none";
+    return mode;
+}
+
+- (void)setCustomBackgroundMode:(NSString *)mode {
+    if (!mode) mode = @"none";
+    NSUserDefaults *defaults = [[self class] defaults];
+    [defaults setObject:mode forKey:@"customBackgroundMode"];
+    [defaults synchronize];
+}
+
+- (NSString *)customBackgroundColorHex {
+    return [[[self class] defaults] stringForKey:@"customBackgroundColorHex"];
+}
+
+- (void)setCustomBackgroundColorHex:(NSString *)hex {
+    NSUserDefaults *defaults = [[self class] defaults];
+    if (hex) [defaults setObject:hex forKey:@"customBackgroundColorHex"];
+    else [defaults removeObjectForKey:@"customBackgroundColorHex"];
+    [defaults synchronize];
+}
+
+- (NSString *)customBackgroundImagePath {
+    return [[[self class] defaults] stringForKey:@"customBackgroundImagePath"];
+}
+
+- (void)setCustomBackgroundImagePath:(NSString *)path {
+    NSUserDefaults *defaults = [[self class] defaults];
+    if (path) [defaults setObject:path forKey:@"customBackgroundImagePath"];
+    else [defaults removeObjectForKey:@"customBackgroundImagePath"];
+    [defaults synchronize];
+}
+
+- (NSString *)customBackgroundImageDirectory {
+    NSArray<NSString *> *dirs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *base = dirs.firstObject ?: NSTemporaryDirectory();
+    return [base stringByAppendingPathComponent:@"TikTokMod"];
+}
+
+- (nullable UIImage *)customBackgroundImage {
+    NSString *path = self.customBackgroundImagePath;
+    if (!path) return nil;
+    return [UIImage imageWithContentsOfFile:path];
+}
+
+- (BOOL)saveCustomBackgroundImage:(UIImage *)image {
+    if (!image) {
+        NSLog(@"[TikTokMod] saveCustomBackgroundImage: nil image, skipping (fail-soft)");
+        return NO;
+    }
+    NSData *jpeg = UIImageJPEGRepresentation(image, 0.85);
+    if (!jpeg) {
+        NSLog(@"[TikTokMod] saveCustomBackgroundImage: could not encode JPEG");
+        return NO;
+    }
+    NSString *dir = [self customBackgroundImageDirectory];
+    NSError *error = nil;
+    [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:&error];
+    if (error) {
+        NSLog(@"[TikTokMod] saveCustomBackgroundImage: mkdir failed: %@", error);
+        return NO;
+    }
+    NSString *path = [dir stringByAppendingPathComponent:@"custom-background.jpg"];
+    if (![jpeg writeToFile:path options:NSDataWritingAtomic error:&error]) {
+        NSLog(@"[TikTokMod] saveCustomBackgroundImage: write failed: %@", error);
+        return NO;
+    }
+    self.customBackgroundImagePath = path;
+    self.customBackgroundMode = @"image";
+    NSLog(@"[TikTokMod] custom background image saved: %@", path);
+    return YES;
+}
+
+- (void)clearCustomBackgroundImage {
+    NSString *path = self.customBackgroundImagePath;
+    if (path) {
+        [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+    }
+    self.customBackgroundImagePath = nil;
+    self.customBackgroundMode = @"none";
+    NSLog(@"[TikTokMod] custom background cleared");
+}
+
+- (nullable UIColor *)customBackgroundColor {
+    NSString *hex = self.customBackgroundColorHex;
+    if (!hex) return nil;
+    NSString *clean = [[hex stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] uppercaseString];
+    if ([clean hasPrefix:@"#"]) clean = [clean substringFromIndex:1];
+    if (clean.length != 6) {
+        NSLog(@"[TikTokMod] customBackgroundColor: bad hex %@", hex);
+        return nil;
+    }
+    unsigned rgb = 0;
+    NSScanner *scanner = [NSScanner scannerWithString:clean];
+    if (![scanner scanHexInt:&rgb]) return nil;
+    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0
+                           green:((rgb >> 8) & 0xFF) / 255.0
+                            blue:(rgb & 0xFF) / 255.0 alpha:1.0];
+}
+
+- (void)applyCustomBackgroundToView:(UIView *)view {
+    // STUB — the real overlay view lands with the research hooks.
+    // Recorded choice only; applying nothing yet so video rendering and
+    // text readability cannot break at this stage.
+    if (!view) return;
+    NSLog(@"[TikTokMod] applyCustomBackgroundToView: STUB (mode=%@ hex=%@ image=%@) — overlay not applied yet",
+          self.customBackgroundMode, self.customBackgroundColorHex ?: @"-",
+          self.customBackgroundImage ? @"set" : @"none");
+}
 
 @end

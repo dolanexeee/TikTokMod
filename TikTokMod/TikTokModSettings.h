@@ -18,6 +18,7 @@
 //  TikTok hooks yet.
 //
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -37,6 +38,23 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (BOOL)boolForKey:(NSString *)key;
 - (void)setBool:(BOOL)value forKey:(NSString *)key;
+
+// --- #45 Custom Background (Mustafa's own request, not from TikTok You) ---
+// Toggle itself is the `customBackground` BOOL property (registry #45).
+// Mode: @"image" | @"color" | @"none". Image is stored as a JPEG file under
+// the app's Documents/TikTokMod/ (path kept in the settings suite);
+// color is stored as a hex string (e.g. @"#1A1A2E").
+@property (nonatomic, copy, nullable) NSString *customBackgroundMode;
+@property (nonatomic, copy, nullable) NSString *customBackgroundColorHex;
+@property (nonatomic, copy, nullable) NSString *customBackgroundImagePath;
+- (nullable UIImage *)customBackgroundImage;
+- (BOOL)saveCustomBackgroundImage:(UIImage *)image;
+- (void)clearCustomBackgroundImage;
+- (nullable UIColor *)customBackgroundColor;
+/// Stub for now: logs the stored choice. The real overlay background view
+/// (behind the feed, must not break video rendering or text readability)
+/// lands with the research hooks — do NOT call this as if it worked yet.
+- (void)applyCustomBackgroundToView:(UIView *)view;
 
 @property (nonatomic, assign) BOOL interfaceEditor;  // #1 Interface editor — hide any element, one tap
 @property (nonatomic, assign) BOOL playbackSpeed3x;  // #2 Playback speed picker up to 3x (persists)
@@ -78,6 +96,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) BOOL telegramCommunityLink;  // #42 Telegram community link
 @property (nonatomic, assign) BOOL hideSeriesRows;  // #43 Hide Series rows — HIDE ONLY, never unlock
 @property (nonatomic, assign) BOOL watermarkFreeDownloads;  // #44 Watermark-free downloads
+@property (nonatomic, assign) BOOL customBackground;  // #45 Custom background — image or color (feed / profile / chat)
 
 @end
 

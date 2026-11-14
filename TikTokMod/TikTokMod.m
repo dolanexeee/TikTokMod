@@ -20,7 +20,7 @@ static void TikTokModInit(void) {
     // Skeleton: no real TikTok classes are hooked yet.
     // Hook sites are added here after R1/R2 deliver the class map,
     // each one via +safeSwizzleClass: so a missing target is a no-op.
-    NSLog(@"[TikTokMod] installHooks: skeleton — 0 hook sites installed, 40 toggle slots registered");
+    NSLog(@"[TikTokMod] installHooks: skeleton — 0 hook sites installed, 41 toggle slots registered");
     (void)[TikTokModSettings shared];
 }
 
