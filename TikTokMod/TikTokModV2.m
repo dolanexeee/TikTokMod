@@ -141,6 +141,7 @@ static BOOL TM2InstallSite(NSString *className, SEL origSel, IMP newImp, IMP *ou
     if (!m) {
         NSLog(@"[TikTokMod] V2 site %@ %@ not found, skipping (fail-soft)",
               className, NSStringFromSelector(origSel));
+        TMLog(@"V2 SKIP (not found): %@ %@", className, NSStringFromSelector(origSel));
         return NO;
     }
     if (kind != '?') {
@@ -154,6 +155,7 @@ static BOOL TM2InstallSite(NSString *className, SEL origSel, IMP newImp, IMP *ou
         if (!ok) {
             NSLog(@"[TikTokMod] V2 site %@ %@: unexpected return type '%c' (wanted '%c'), skipping (fail-soft)",
                   className, NSStringFromSelector(origSel), got, kind);
+            TMLog(@"V2 SKIP (return '%c' wanted '%c'): %@ %@", got, kind, className, NSStringFromSelector(origSel));
             return NO;
         }
     }
@@ -169,6 +171,7 @@ static BOOL TM2InstallSite(NSString *className, SEL origSel, IMP newImp, IMP *ou
         SEL aliasSel = NSSelectorFromString(aliasName);
         class_addMethod(target, aliasSel, *outOrig, method_getTypeEncoding(m));
         NSLog(@"[TikTokMod] V2 hook installed (added override): %@ %@", className, NSStringFromSelector(origSel));
+        TMLog(@"V2 OK (added override): %@ %@", className, NSStringFromSelector(origSel));
         return YES;
     }
     NSString *aliasName = [@"tm2_orig_" stringByAppendingString:NSStringFromSelector(origSel)];
@@ -181,6 +184,7 @@ static BOOL TM2InstallSite(NSString *className, SEL origSel, IMP newImp, IMP *ou
     Method aliasMethod = class_getInstanceMethod(target, aliasSel);
     method_exchangeImplementations(m, aliasMethod);
     NSLog(@"[TikTokMod] V2 hook installed: %@ %@", className, NSStringFromSelector(origSel));
+    TMLog(@"V2 OK: %@ %@", className, NSStringFromSelector(origSel));
     return YES;
 }
 

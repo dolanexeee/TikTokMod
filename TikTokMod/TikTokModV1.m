@@ -14,8 +14,9 @@
 #import "TikTokModHard.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <CoreMedia/CoreMedia.h> // v2: CMTime for _seekToTime:shouldPlay:
 
-NSString * const kTikTokModVersion = @"v1.0";
+NSString * const kTikTokModVersion = @"v47.7.0-v2";
 
 // Overlay view tags (unique range, dylib-owned).
 static const NSInteger kTMTagModButton      = 7001;
@@ -453,8 +454,13 @@ static void TMShowHidePromptForView(UIView *hitView) {
     s.hidden = !TMOn(@"videoSliderSeekBar");
     [s addTarget:self action:@selector(tm_sliderChanged:) forControlEvents:UIControlEventValueChanged];
     [host addSubview:s];
-    [NSTimer scheduledTimerWithTimeInterval:0.5 target:self selector:@selector(tm_sliderTick:)
-                                   userInfo:nil repeats:YES];
+    // FIX v2: one shared ticker, not one timer per host — tm_feedContainerAppeared
+    // runs on every feed VC, and a 0.5 s timer per host would pile up.
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        [NSTimer scheduledTimerWithTimeInterval:0.5 target:self selector:@selector(tm_sliderTick:)
+                                       userInfo:nil repeats:YES];
+    });
 }
 
 + (void)tm_sliderTick:(__unused NSTimer *)timer {
@@ -474,8 +480,12 @@ static void TMShowHidePromptForView(UIView *hitView) {
         NSLog(@"[TikTokMod] #30 seek: active player does not respond to _seekToTime:shouldPlay:");
         return;
     }
-    double target = s.value * TMPlayerDuration(g_activePlayer);
-    ((void (*)(id, SEL, double, BOOL))objc_msgSend)(g_activePlayer, seek, target, YES);
+    double targetSeconds = s.value * TMPlayerDuration(g_activePlayer);
+    // FIX v2 (crash): _seekToTime:shouldPlay: takes a CMTime struct, not a
+    // double (verified from MusicallyCore). Passing a double corrupts the
+    // call — build a real CMTime instead.
+    CMTime target = CMTimeMakeWithSeconds(targetSeconds, 600);
+    ((void (*)(id, SEL, CMTime, BOOL))objc_msgSend)(g_activePlayer, seek, target, YES);
 }
 
 + (void)tm_addFakeStatusBarToView:(UIView *)host {
@@ -529,8 +539,12 @@ static void TMShowHidePromptForView(UIView *hitView) {
     dim.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     dim.hidden = !TMOn(@"antiBurnInHideSystemBars");
     [host addSubview:dim];
-    [NSTimer scheduledTimerWithTimeInterval:60 target:self
-                                   selector:@selector(tm_burnInShift:) userInfo:nil repeats:YES];
+    // FIX v2: one shared timer, not one per host (see slider ticker above).
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        [NSTimer scheduledTimerWithTimeInterval:60 target:self
+                                       selector:@selector(tm_burnInShift:) userInfo:nil repeats:YES];
+    });
 }
 
 + (void)tm_burnInShift:(__unused NSTimer *)timer {
@@ -600,6 +614,9 @@ static void TMShowHidePromptForView(UIView *hitView) {
 
 + (void)applyCellOverlays:(UIView *)cellView {
     if (!cellView) return;
+    // FIX v2: cell overlays are our own view work — an exception here must
+    // never take the feed cell down with it.
+    @try {
     // #1 — hide element classes the user picked in the editor.
     NSArray<NSString *> *hiddenClasses = [TMSettings() hiddenElementClasses];
     if (hiddenClasses.count > 0) {
@@ -687,6 +704,10 @@ static void TMShowHidePromptForView(UIView *hitView) {
         TMWalkViews(cellView, ^(UIView *v) {
             if (v.tag == kTMTagScrim) [v removeFromSuperview];
         });
+    }
+    } @catch (NSException *e) {
+        TMLog(@"CELL overlays FAILED: %@ — %@", e.name, e.reason);
+        NSLog(@"[TikTokMod] applyCellOverlays threw %@ (caught, fail-soft)", e);
     }
 }
 
@@ -1026,11 +1047,19 @@ static BOOL TMHook_Root_prefersStatusBarHidden(id self, SEL _cmd) {
 }
 
 // --- Feed cell ---
-static void TMHook_Cell_setupViewController(id self, SEL _cmd) {
-    ((void (*)(id, SEL))g_orig_Cell_setupViewController)(self, _cmd);
+// FIX v2: the real method RETURNS an object (@16@0:8 — verified from
+// MusicallyCore). The v1 hook declared void, so the 'v' install check
+// skipped it and cell overlays never ran. Return the original's value.
+static id TMHook_Cell_setupViewController(id self, SEL _cmd) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        TMLog(@"FIRST cell setupViewController (cell overlays now live)");
+    });
+    id ret = ((id (*)(id, SEL))g_orig_Cell_setupViewController)(self, _cmd);
     if ([(id)self isKindOfClass:[UIView class]]) {
         [TikTokModV1 applyCellOverlays:(UIView *)self];
     }
+    return ret;
 }
 
 // --- Player: speed (#2) + active-player tracking (#30) ---
@@ -1043,23 +1072,45 @@ static void TMHook_Player_setPlaybackRate(id self, SEL _cmd, float rate) {
     ((void (*)(id, SEL, float))g_orig_Player_setPlaybackRate)(self, _cmd, rate);
 }
 
-static void TMHook_Player_setCurrentPlaybackRate(id self, SEL _cmd, float rate) {
+// FIX v2 (crash): the real method takes a DOUBLE (type encoding
+// v24@0:8d16 — verified from MusicallyCore). The v1 hook declared float,
+// so the player received a garbage rate at first-video setup.
+static void TMHook_Player_setCurrentPlaybackRate(id self, SEL _cmd, double rate) {
     g_activePlayer = self;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        TMLog(@"FIRST setCurrentPlaybackRate: %.3f (toggle %@)", rate,
+              TMOn(@"playbackSpeed3x") ? @"ON" : @"OFF");
+    });
     if (TMOn(@"playbackSpeed3x")) {
-        ((void (*)(id, SEL, float))g_orig_Player_setCurrentPlaybackRate)(self, _cmd, [TMSettings() playbackRateValue]);
+        ((void (*)(id, SEL, double))g_orig_Player_setCurrentPlaybackRate)(self, _cmd, (double)[TMSettings() playbackRateValue]);
         return;
     }
-    ((void (*)(id, SEL, float))g_orig_Player_setCurrentPlaybackRate)(self, _cmd, rate);
+    ((void (*)(id, SEL, double))g_orig_Player_setCurrentPlaybackRate)(self, _cmd, rate);
 }
 
-static void TMHook_Player_seekToTime(id self, SEL _cmd, double time, BOOL play) {
+// FIX v2 (CRASH — prime culprit): the real method takes a CMTime struct
+// (type encoding v44@0:8{?=qiIq}16B40 — verified from MusicallyCore), passed
+// by invisible pointer in x2 with the BOOL in w3. The v1 hook declared
+// (double, BOOL), so it read garbage from d0/w2 — and the __weak assignment
+// to g_activePlayer (objc_storeWeak) clobbered x2/w3, so the original
+// dereferenced a garbage CMTime pointer → EXC_BAD_ACCESS the moment the
+// player seeks at first-video load. Correct prototype below.
+static void TMHook_Player_seekToTime(id self, SEL _cmd, CMTime time, BOOL play) {
     g_activePlayer = self;
-    ((void (*)(id, SEL, double, BOOL))g_orig_Player_seekToTime)(self, _cmd, time, play);
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        TMLog(@"FIRST seek: CMTime value=%lld timescale=%d flags=%u play=%d",
+              (long long)time.value, time.timescale, time.flags, (int)play);
+    });
+    ((void (*)(id, SEL, CMTime, BOOL))g_orig_Player_seekToTime)(self, _cmd, time, play);
 }
 
-static void TMHook_Engine_setPlaybackSpeed(id self, SEL _cmd, float speed) {
-    if (TMOn(@"playbackSpeed3x")) speed = [TMSettings() playbackRateValue];
-    ((void (*)(id, SEL, float))g_orig_Engine_setPlaybackSpeed)(self, _cmd, speed);
+// FIX v2 (crash): the real method takes a DOUBLE (v24@0:8d16 — verified
+// from MusicallyCore). The v1 hook declared float → garbage engine speed.
+static void TMHook_Engine_setPlaybackSpeed(id self, SEL _cmd, double speed) {
+    if (TMOn(@"playbackSpeed3x")) speed = (double)[TMSettings() playbackRateValue];
+    ((void (*)(id, SEL, double))g_orig_Engine_setPlaybackSpeed)(self, _cmd, speed);
 }
 
 // --- PiP (#3): force the stock gates open ---
@@ -1101,6 +1152,10 @@ static BOOL TMHook_StoryBar(id self, SEL _cmd) {
 // --- Data source filter (#34 photo, #35 live, #43 series) ---
 static id TMHook_DataSource_filteredDataSource(id self, SEL _cmd) {
     NSArray *orig = ((id (*)(id, SEL))g_orig_DataSource)(self, _cmd);
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        TMLog(@"FIRST filteredDataSource: %lu item(s)", (unsigned long)orig.count);
+    });
     if (!orig) return orig;
     BOOL hidePhoto = TMOn(@"hidePhotoMode");
     BOOL hideLive = TMOn(@"hideLiveEntries");
@@ -1198,6 +1253,7 @@ static BOOL TMInstallSite(NSString *className, SEL origSel, IMP newImp, IMP *out
     if (!m) {
         NSLog(@"[TikTokMod] V1 site %@ %@ not found, skipping (fail-soft)",
               className, NSStringFromSelector(origSel));
+        TMLog(@"V1 SKIP (not found): %@ %@", className, NSStringFromSelector(origSel));
         return NO;
     }
     if (retPrefix) {
@@ -1209,8 +1265,24 @@ static BOOL TMInstallSite(NSString *className, SEL origSel, IMP newImp, IMP *out
         if (!ok) {
             NSLog(@"[TikTokMod] V1 site %@ %@: unexpected return type '%c', skipping (fail-soft)",
                   className, NSStringFromSelector(origSel), got);
+            TMLog(@"V1 SKIP (return '%c' wanted '%s'): %@ %@", got, retPrefix, className, NSStringFromSelector(origSel));
             return NO;
         }
+    }
+    // FIX v2 (latent hazard): if the class does NOT implement the selector
+    // itself (inherited, e.g. TTKStandardProfileBannerContainer's
+    // layoutSubviews — UIView's), exchanging implementations would swap the
+    // SUPERCLASS's method and hook every subclass. Instead, ADD our IMP as
+    // the class's own method and keep the inherited IMP as the original
+    // (V2's rule). Only exchange when the class already has its own method.
+    *outOrig = method_getImplementation(m);
+    if (class_addMethod(target, origSel, newImp, method_getTypeEncoding(m))) {
+        NSString *aliasName = [@"tm_orig_" stringByAppendingString:NSStringFromSelector(origSel)];
+        SEL aliasSel = NSSelectorFromString(aliasName);
+        class_addMethod(target, aliasSel, *outOrig, method_getTypeEncoding(m));
+        NSLog(@"[TikTokMod] V1 hook installed (added override): %@ %@", className, NSStringFromSelector(origSel));
+        TMLog(@"V1 OK (added override): %@ %@", className, NSStringFromSelector(origSel));
+        return YES;
     }
     NSString *aliasName = [@"tm_orig_" stringByAppendingString:NSStringFromSelector(origSel)];
     SEL aliasSel = NSSelectorFromString(aliasName);
@@ -1219,10 +1291,10 @@ static BOOL TMInstallSite(NSString *className, SEL origSel, IMP newImp, IMP *out
               className, NSStringFromSelector(origSel), aliasName);
         return NO;
     }
-    *outOrig = method_getImplementation(m);
     Method aliasMethod = class_getInstanceMethod(target, aliasSel);
     method_exchangeImplementations(m, aliasMethod);
     NSLog(@"[TikTokMod] V1 hook installed: %@ %@", className, NSStringFromSelector(origSel));
+    TMLog(@"V1 OK: %@ %@", className, NSStringFromSelector(origSel));
     return YES;
 }
 
@@ -1285,7 +1357,7 @@ static BOOL g_v1InstalledAppDelegate = NO;
     if (!g_v1InstalledCell) {
         g_v1InstalledCell = TMInstallSite(@"AWEFeedViewCell",
             @selector(setupViewController), (IMP)TMHook_Cell_setupViewController,
-            &g_orig_Cell_setupViewController, NO, "v");
+            &g_orig_Cell_setupViewController, NO, "@");
     }
     if (!g_v1InstalledPlayerRate) {
         g_v1InstalledPlayerRate = TMInstallSite(@"AWEVideoPlayerController",
@@ -1313,9 +1385,11 @@ static BOOL g_v1InstalledAppDelegate = NO;
             &g_orig_PiP1_supported, NO, "B");
     }
     if (!g_v1InstalledPiP2) {
+        // FIX v2: isPictureInPictureSupported is a CLASS method (verified
+        // from MusicallyCore) — the v1 instance install always skipped.
         g_v1InstalledPiP2 = TMInstallSite(@"TTPictureInPictureController",
             @selector(isPictureInPictureSupported), (IMP)TMHook_PiP2_supported,
-            &g_orig_PiP2_supported, NO, "B");
+            &g_orig_PiP2_supported, YES, "B");
     }
     if (!g_v1InstalledPiPGate) {
         g_v1InstalledPiPGate = TMInstallSite(@"TTKFeedAppDiffComponent",
@@ -1417,6 +1491,10 @@ static BOOL g_v1InstalledAppDelegate = NO;
 }
 
 + (void)tm_feedRootAppeared:(UIViewController *)vc {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        TMLog(@"FEED root appeared (first): %@", NSStringFromClass([vc class]));
+    });
     [self retryDeferredInstalls];
     [TikTokModV2 retryDeferredInstalls];
     if (vc.view && TMOn(@"customBackground")) {
@@ -1429,14 +1507,25 @@ static BOOL g_v1InstalledAppDelegate = NO;
 + (void)tm_feedContainerAppeared:(UIViewController *)vc {
     UIView *view = vc.view;
     if (!view) return;
-    [self tm_addModButtonToView:view];
-    [self tm_addPiPButtonToView:view];
-    [self tm_addSliderToView:view];
-    [self tm_addFakeStatusBarToView:view];
-    [self tm_addBurnInOverlayToView:view];
-    [self tm_addDrawButtonToView:view];
-    [self tm_installEditorGestureOnView:view];
-    if (TMOn(@"customBackground")) [self tm_applyCustomBackgroundToView:view];
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        TMLog(@"FEED container appeared (first): %@", NSStringFromClass([vc class]));
+    });
+    // FIX v2: our own overlay work is guarded — an exception here must never
+    // take the feed down with it.
+    @try {
+        [self tm_addModButtonToView:view];
+        [self tm_addPiPButtonToView:view];
+        [self tm_addSliderToView:view];
+        [self tm_addFakeStatusBarToView:view];
+        [self tm_addBurnInOverlayToView:view];
+        [self tm_addDrawButtonToView:view];
+        [self tm_installEditorGestureOnView:view];
+        if (TMOn(@"customBackground")) [self tm_applyCustomBackgroundToView:view];
+    } @catch (NSException *e) {
+        TMLog(@"FEED container overlays FAILED: %@ — %@", e.name, e.reason);
+        NSLog(@"[TikTokMod] feed container overlays threw %@ (caught, fail-soft)", e);
+    }
 }
 
 + (void)tm_addDrawButtonToView:(UIView *)host {

@@ -33,4 +33,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
+/// Crash-trail log (v2): append a timestamped line to
+/// Documents/TikTokMod/diag.log, synchronously (so the line is on disk
+/// before the caller proceeds — a crash right after still leaves a trail),
+/// and mirror it to NSLog. Safe to call from any thread.
+void TMLog(NSString *format, ...) NS_FORMAT_FUNCTION(1, 2);
+
+/// Absolute path of the diag log file (for the hub's share row).
+NSString *TMLogPath(void);
+
 NS_ASSUME_NONNULL_END

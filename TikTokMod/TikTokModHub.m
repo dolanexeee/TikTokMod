@@ -9,6 +9,7 @@
 //  Series is hide-only, never an unlock.
 //
 #import "TikTokModHub.h"
+#import "TikTokMod.h"
 #import "TikTokModSettings.h"
 #import "TikTokModV1.h"
 #import "TikTokModV2.h"
@@ -157,6 +158,7 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
             @{@"id": @"otaCheck", @"title": @"Check for mod updates (#41, incl. #15)"},
             @{@"id": @"telegram", @"title": @"Telegram community (#42)"},
             @{@"id": @"startupShow", @"title": @"Show startup screen again (#40)"},
+            @{@"id": @"diagLog", @"title": @"Share diagnostic log — crash trail (v2)"},
         ];
     }
     if ([section isEqualToString:@"Feed & Discovery"]) {
@@ -203,6 +205,13 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
         return url.length > 0 ? url : @"No link configured — tap to set it";
     }
     if ([rowId isEqualToString:@"startupShow"]) return @"Opens the check / download / FAQ / legal / stats screen";
+    if ([rowId isEqualToString:@"diagLog"]) {
+        NSString *path = TMLogPath();
+        NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil];
+        if (!attrs) return @"No log yet — it is written from the next launch";
+        unsigned long long size = [attrs[NSFileSize] unsignedLongLongValue];
+        return [NSString stringWithFormat:@"%llu bytes — tap to share (Files app: TikTok → TikTokMod → diag.log)", size];
+    }
     if ([rowId isEqualToString:@"unhideAll"]) {
         return [NSString stringWithFormat:@"%lu element class(es) hidden",
                 (unsigned long)(s.hiddenElementClasses.count)];
@@ -544,6 +553,26 @@ static NSString * const kCustomBackgroundPickerSection = @"Profile & Appearance"
         [TikTokModV1 openTelegramFromViewController:self];
     } else if ([rowId isEqualToString:@"startupShow"]) {
         [TikTokModV1 presentStartupScreenNow];
+    } else if ([rowId isEqualToString:@"diagLog"]) {
+        // v2 crash trail: share Documents/TikTokMod/diag.log (also readable
+        // in the Files app). If the file is missing, say so — never crash here.
+        NSString *path = TMLogPath();
+        if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+            UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Diagnostic log"
+                message:@"No log file yet. It is written from the next TikTok launch — open the feed once, then share it here."
+                preferredStyle:UIAlertControllerStyleAlert];
+            [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+            [self presentViewController:a animated:YES completion:nil];
+        } else {
+            UIActivityViewController *share = [[UIActivityViewController alloc]
+                initWithActivityItems:@[[NSURL fileURLWithPath:path]] applicationActivities:nil];
+            if (share.popoverPresentationController) {
+                share.popoverPresentationController.sourceView = self.view;
+                share.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2,
+                    self.view.bounds.size.height / 2, 1, 1);
+            }
+            [self presentViewController:share animated:YES completion:nil];
+        }
     } else if ([rowId isEqualToString:@"unhideAll"]) {
         [s setHiddenElementClasses:nil];
         NSLog(@"[TikTokMod] #1 unhid all editor-hidden elements");

@@ -131,6 +131,7 @@ static BOOL TM3InstallSite(NSString *className, SEL origSel, IMP newImp, IMP *ou
     if (!m) {
         NSLog(@"[TikTokMod] HARD site %@ %@ not found, skipping (fail-soft)",
               className, NSStringFromSelector(origSel));
+        TMLog(@"HARD SKIP (not found): %@ %@", className, NSStringFromSelector(origSel));
         return NO;
     }
     if (kind != '?') {
@@ -144,6 +145,7 @@ static BOOL TM3InstallSite(NSString *className, SEL origSel, IMP newImp, IMP *ou
         if (!ok) {
             NSLog(@"[TikTokMod] HARD site %@ %@: unexpected return type '%c' (wanted '%c'), skipping (fail-soft)",
                   className, NSStringFromSelector(origSel), got, kind);
+            TMLog(@"HARD SKIP (return '%c' wanted '%c'): %@ %@", got, kind, className, NSStringFromSelector(origSel));
             return NO;
         }
     }
@@ -156,6 +158,7 @@ static BOOL TM3InstallSite(NSString *className, SEL origSel, IMP newImp, IMP *ou
         SEL aliasSel = NSSelectorFromString(aliasName);
         class_addMethod(target, aliasSel, *outOrig, method_getTypeEncoding(m));
         NSLog(@"[TikTokMod] HARD hook installed (added override): %@ %@", className, NSStringFromSelector(origSel));
+        TMLog(@"HARD OK (added override): %@ %@", className, NSStringFromSelector(origSel));
         return YES;
     }
     NSString *aliasName = [@"tm3_orig_" stringByAppendingString:NSStringFromSelector(origSel)];
@@ -168,6 +171,7 @@ static BOOL TM3InstallSite(NSString *className, SEL origSel, IMP newImp, IMP *ou
     Method aliasMethod = class_getInstanceMethod(target, aliasSel);
     method_exchangeImplementations(m, aliasMethod);
     NSLog(@"[TikTokMod] HARD hook installed: %@ %@", className, NSStringFromSelector(origSel));
+    TMLog(@"HARD OK: %@ %@", className, NSStringFromSelector(origSel));
     return YES;
 }
 

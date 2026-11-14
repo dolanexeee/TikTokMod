@@ -8,12 +8,56 @@
 #import "TikTokModV2.h"
 #import "TikTokModHard.h"
 
+// Crash trail (v2): synchronous, unbuffered append to
+// Documents/TikTokMod/diag.log. The user can read it in the Files app
+// (On My iPhone → TikTok → TikTokMod → diag.log) or share it from the
+// hub's "Share diagnostic log" row. One line per event, timestamped.
+NSString *TMLogPath(void) {
+    NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    return [[docs stringByAppendingPathComponent:@"TikTokMod"] stringByAppendingPathComponent:@"diag.log"];
+}
+
+void TMLog(NSString *format, ...) {
+    if (!format) return;
+    va_list args;
+    va_start(args, format);
+    NSString *msg = [[NSString alloc] initWithFormat:format arguments:args];
+    va_end(args);
+    static NSObject *lock = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ lock = [NSObject new]; });
+    @synchronized (lock) {
+        NSString *path = TMLogPath();
+        NSFileManager *fm = [NSFileManager defaultManager];
+        NSString *dir = [path stringByDeletingLastPathComponent];
+        if (![fm fileExistsAtPath:dir]) {
+            [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+        }
+        NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+        fmt.dateFormat = @"HH:mm:ss.SSS";
+        NSString *line = [NSString stringWithFormat:@"%@ %@\n", [fmt stringFromDate:[NSDate date]], msg];
+        NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:path];
+        if (!fh) {
+            [line writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:nil];
+        } else {
+            @try {
+                [fh seekToEndOfFile];
+                [fh writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+            } @catch (__unused NSException *e) {
+            }
+            [fh closeFile];
+        }
+    }
+    NSLog(@"[TikTokMod][diag] %@", msg);
+}
+
 __attribute__((constructor))
 static void TikTokModInit(void) {
     @autoreleasepool {
+        TMLog(@"LOADED TikTokMod %@ (dylib constructor)", kTikTokModVersion);
         NSLog(@"TikTokMod loaded");
-        NSLog(@"[TikTokMod] TikTokMod loaded (47.7.0 V3, 42 features per DYLIB-DESIGN.md §4; "
-              @"HARD phase UNVERIFIED-RUNTIME — pinning bypass unproven without a traffic capture)");
+        NSLog(@"[TikTokMod] TikTokMod loaded (%@, 42 features per DYLIB-DESIGN.md §4; "
+              @"HARD phase UNVERIFIED-RUNTIME — pinning bypass unproven without a traffic capture)", kTikTokModVersion);
         [TikTokMod installHooks];
     }
 }
@@ -29,6 +73,7 @@ static void TikTokModInit(void) {
     [TikTokModV2 installV2Hooks];
     [TikTokModHard installHardHooks];
     (void)[TikTokModSettings shared];
+    TMLog(@"INSTALL complete: V1+V2+HARD installers ran (per-site results above)");
     NSLog(@"[TikTokMod] installHooks: V1+V2+HARD installed (42 toggle slots registered; "
           @"compile-verified only — no iOS device on the build VM, nothing runtime-tested; "
           @"HARD downloads UNVERIFIED-RUNTIME, #24 PARTIAL, #44 DEFER)");
